@@ -2,10 +2,13 @@ import openai
 import matplotlib.pyplot as plt
 import random
 import numpy as np
+import time
+from api_keys import OPENAI_API_KEY
 
+openai.api_key = OPENAI_API_KEY
 
 # Generate a string of 0s and 1s using GPT-3 and return token probabilities
-def generate_binary_string_and_probabilities(prompt, length=1000):
+def generate_binary_string_and_probabilities(prompt, length=1):
     response = openai.Completion.create(
         engine="davinci",
         prompt=prompt,
@@ -24,13 +27,6 @@ def generate_binary_string_and_probabilities(prompt, length=1000):
     zero_probs = [token_probs.get(' 0', 0) for token_probs in probabilities]
     return binary_string, zero_probs
 
-#prompt = "Generate a uniformly random binary string of 0s and 1s. Previous digits should have no influence on future digits: 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0,"
-prompt = "Generate a uniformly random binary string of 0s and 1s. Previous digits should have no influence on future digits: 1 0 0 1 1 0 0 0 1 1 0 0 1 1 0 1 1 1 1 0 1 0 1 0 1 0 0"
-
-binary_string, probabilities = generate_binary_string_and_probabilities(prompt)
-print(binary_string)
-print(probabilities)
-
 # Plot the token probabilities as a histogram
 def plot_token_probabilities_histogram(zero_probs):
 
@@ -40,8 +36,6 @@ def plot_token_probabilities_histogram(zero_probs):
     plt.title('Token Probabilities Histogram')
     plt.legend()
     plt.show()
-
-plot_token_probabilities_histogram(probabilities)
 
 # Generate random binary demo sequence
 def random_demo_sequence(length):
@@ -53,22 +47,19 @@ def generate_demo_sequence_probabilities(iterations, demo_sequence_length):
     for _ in range(iterations):
         random_demo = random_demo_sequence(demo_sequence_length)
         prompt = f"Generate a uniformly random binary string of 0s and 1s. Previous digits should have no influence on future digits: {random_demo}"
-        zero_prob = generate_binary_string_and_probabilities(prompt)
+        zero_prob = generate_binary_string_and_probabilities(prompt, 1)[1]
         zero_probs.extend(zero_prob)
     return zero_probs
 
-# Generate probabilities using random demo sequences
-iterations = 1000
-demo_sequence_length = 20
-probabilities = generate_demo_sequence_probabilities(iterations, demo_sequence_length)
-
 # Plot the token probabilities as a histogram
-def plot_token_probabilities_histogram(zero_probs):
-    plt.hist(zero_probs, label='0', bins=100, alpha=0.7)
+def plot_token_probabilities_histogram(zero_probs, bins=100, save_folder=None):
+    plt.hist(zero_probs, label='0', bins=bins, alpha=0.7)
     plt.xlabel('Probability')
     plt.ylabel('Frequency')
     plt.title('Token Probabilities Histogram')
     plt.legend()
+    if save_folder is not None:
+        plt.savefig(save_folder + str(time.time()) + '.png')
     plt.show()
 
 def hoefding_confidence_interval(probabilities, confidence_level=0.95):
@@ -85,7 +76,10 @@ def hoefding_confidence_interval(probabilities, confidence_level=0.95):
 
     return lower_bound, upper_bound
 
+# Generate probabilities using random demo sequences
+probabilities = generate_demo_sequence_probabilities(iterations=10, demo_sequence_length=100)
+print(probabilities)
 confidence_level = 0.95
 lower_bound, upper_bound = hoefding_confidence_interval(probabilities, confidence_level)
 print(f"95% confidence interval for the probability of 0: [{lower_bound:.4f}, {upper_bound:.4f}]")
-plot_token_probabilities_histogram(probabilities)
+plot_token_probabilities_histogram(probabilities, save_folder='plots/')
