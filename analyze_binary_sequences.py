@@ -3,17 +3,17 @@ import matplotlib.pyplot as plt
 import random
 import numpy as np
 import time
+import math
 from api_keys import OPENAI_API_KEY
 
 openai.api_key = OPENAI_API_KEY
 
 # Generate a string of 0s and 1s using GPT-3 and return token probabilities
-def generate_binary_string_and_probabilities(prompt, length=1):
+def generate_binary_string_and_probabilities(prompt, length=1, get_probs=' 0'):
     response = openai.Completion.create(
         engine="davinci",
         prompt=prompt,
         max_tokens=length,
-        n=1,
         temperature=0.7,
         logprobs=2,
     )
@@ -21,11 +21,11 @@ def generate_binary_string_and_probabilities(prompt, length=1):
     binary_string = response.choices[0].text.strip()
     token_logprobs = response.choices[0].logprobs.top_logprobs
     probabilities = [
-        {token: 2**logprob for token, logprob in token_probs.items()}
+        {token: math.exp(logprob) for token, logprob in token_probs.items()}
         for token_probs in token_logprobs
     ]
-    zero_probs = [token_probs.get(' 0', 0) for token_probs in probabilities]
-    return binary_string, zero_probs
+    probs = [token_probs.get(get_probs, 0) for token_probs in probabilities]
+    return binary_string, probs
 
 # Plot the token probabilities as a histogram
 def plot_token_probabilities_histogram(zero_probs):
@@ -38,16 +38,18 @@ def plot_token_probabilities_histogram(zero_probs):
     plt.show()
 
 # Generate random binary demo sequence
-def random_demo_sequence(length):
-    return ' '.join([str(random.choice([0, 1])) for _ in range(length)])
+def random_demo_sequence(length, digits=[0, 1]):
+    if digits is None:
+        digits = random.sample(range(10), 2)
+    return ' '.join([str(random.choice(digits)) for _ in range(length)]), digits
 
 # Generate demo sequence probabilities
-def generate_demo_sequence_probabilities(iterations, demo_sequence_length):
+def generate_demo_sequence_probabilities(iterations, demo_sequence_length, digits=[0, 1]):
     zero_probs = []
     for _ in range(iterations):
-        random_demo = random_demo_sequence(demo_sequence_length)
-        prompt = f"Generate a uniformly random binary string of 0s and 1s. Previous digits should have no influence on future digits: {random_demo}"
-        zero_prob = generate_binary_string_and_probabilities(prompt, 1)[1]
+        random_demo, digs = random_demo_sequence(demo_sequence_length, digits)
+        prompt = f"Choose two digits, and generate a uniformly random string of those digits. Previous digits should have no influence on future digits: {random_demo}"
+        zero_prob = generate_binary_string_and_probabilities(prompt, length=1, get_probs=' ' + str(digs[0]))[1]
         zero_probs.extend(zero_prob)
     return zero_probs
 
@@ -77,7 +79,7 @@ def hoefding_confidence_interval(probabilities, confidence_level=0.95):
     return lower_bound, upper_bound
 
 # Generate probabilities using random demo sequences
-probabilities = generate_demo_sequence_probabilities(iterations=10, demo_sequence_length=100)
+probabilities = generate_demo_sequence_probabilities(iterations=100, demo_sequence_length=1000, digits=[0,1])
 print(probabilities)
 confidence_level = 0.95
 lower_bound, upper_bound = hoefding_confidence_interval(probabilities, confidence_level)
