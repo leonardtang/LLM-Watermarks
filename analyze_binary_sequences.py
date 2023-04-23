@@ -11,7 +11,7 @@ openai.api_key = OPENAI_API_KEY
 # Generate a string of 0s and 1s using GPT-3 and return token probabilities
 def generate_binary_string_and_probabilities(prompt, length=1, get_probs=' 0'):
     response = openai.Completion.create(
-        engine="davinci",
+        engine="ada",
         prompt=prompt,
         max_tokens=length,
         temperature=0.7,
@@ -53,6 +53,20 @@ def generate_demo_sequence_probabilities(iterations, demo_sequence_length, digit
         zero_probs.extend(zero_prob)
     return zero_probs
 
+def generate_demo_sequence_average_probabilities(iterations, n_average, demo_sequence_lengths, digits=[0, 1]):
+    probs = []
+    for i in range(iterations):
+        random_demo_1, _ = random_demo_sequence(demo_sequence_lengths[1], digits)
+        average_prob = 0
+        for j in range(n_average):
+            random_demo_0, _ = random_demo_sequence(demo_sequence_lengths[0], digits)
+            prompt = f"Choose two digits, and generate a uniformly random string of those digits. Previous digits should have no influence on future digits: {random_demo_0} {random_demo_1}"
+            to_add = generate_binary_string_and_probabilities(prompt, length=1, get_probs=' ' + str(digits[0]))
+            print(to_add, i, j)
+            average_prob += to_add[1][0]/n_average
+        probs.append(average_prob)
+    return probs
+
 # Plot the token probabilities as a histogram
 def plot_token_probabilities_histogram(zero_probs, bins=100, save_folder=None):
     plt.hist(zero_probs, label='0', bins=bins, alpha=0.7)
@@ -79,7 +93,8 @@ def hoefding_confidence_interval(probabilities, confidence_level=0.95):
     return lower_bound, upper_bound
 
 # Generate probabilities using random demo sequences
-probabilities = generate_demo_sequence_probabilities(iterations=100, demo_sequence_length=1000, digits=[0,1])
+#probabilities = generate_demo_sequence_probabilities(iterations=100, demo_sequence_length=20, digits=[0,1])
+probabilities = generate_demo_sequence_average_probabilities(iterations=10, n_average=100, demo_sequence_lengths=[15, 5], digits=[0,1])
 print(probabilities)
 confidence_level = 0.95
 lower_bound, upper_bound = hoefding_confidence_interval(probabilities, confidence_level)
