@@ -1,0 +1,4 @@
+Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response.
+- https://twitter.com/colin_fraser/status/1636755134679224320/photo/1
+- Meant for ChatGPT
+
