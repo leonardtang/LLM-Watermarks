@@ -89,6 +89,7 @@ def generate_random_digit(
     if model_name == 'openai-api':
         # TODO(ltang): imeplement Watemarks using logit_bias on OpenAI model
         if watermark:
+            print("Watermark in open-ai model")
             logit_bias = {}
             # TODO(ltang): figure out what the vocab size is actually supposed to be for each OpenAI model
             # https://enjoymachinelearning.com/blog/the-gpt-3-vocabulary-size/
@@ -103,6 +104,7 @@ def generate_random_digit(
             logit_bias = None
         while True:
             try:
+                print("Trying to generate")
                 response = openai.Completion.create(
                     engine=engine,
                     prompt=prompt,
@@ -110,17 +112,21 @@ def generate_random_digit(
                     max_tokens=length, 
                     temperature=1,
                     logprobs=2,
+                    logit_bias=logit_bias,
                 )
 
                 raw_digit = response.choices[0].text.strip()
                 int_digit = int(raw_digit)
-            except:
+            except Exception as e:
+                print(f"Exception: {e}")
                 # Catch when generated `raw_digit` is not of `int` type
                 # Or just catch general OpenAI server error 
                 continue
             else:
+                print("Break oops")
                 break
         
+        print("Generated a digit: ", int_digit)
         return int_digit
 
     # TODO(ltang): Analyze digit distribution of an open-source model with and without watermark
@@ -227,8 +233,8 @@ def KL_loop(num_dists, out_file, gamma, delta):
     pairwise_KLs = []
     watermark = SingleLookbackWatermark(gamma=gamma, delta=delta)
     for _ in range(num_dists):
-        digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
-        # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=2000, watermark=watermark)
+        # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
+        digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
         distributions.append(np.array(digit_sample))
 
     for i, d_1 in enumerate(distributions):
