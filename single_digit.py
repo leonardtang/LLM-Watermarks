@@ -222,7 +222,7 @@ def KL(P, Q):
     return divergence
 
 
-def KL_loop(prompt, num_dists, out_file, gamma, delta):
+def KL_loop(prompt, length, num_dists, out_file, gamma, delta):
     """
     - Generate `num_dists` distributions and compute pairwise KL between them.
     - Generate violin plot
@@ -235,7 +235,7 @@ def KL_loop(prompt, num_dists, out_file, gamma, delta):
     for _ in range(num_dists):
         # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
         # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
-        digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=10, repetitions=1000, watermark=watermark)
+        digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
         distributions.append(np.array(digit_sample))
 
     for i, d_1 in enumerate(distributions):
@@ -266,15 +266,15 @@ def KL_loop(prompt, num_dists, out_file, gamma, delta):
 
 
 if __name__ == "__main__":
-    prompt = "Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response."
+    # prompt = "Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response."
     # prompt = "What is a random value between 1 and 100?"
     # Alpaca Prompt
-    # alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
+    alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
 
-    # ### Instruction:
-    # Generate a random number between 1 and 100.
+    ### Instruction:
+    Generate a random number between 1 and 100.
 
-    # ### Response:"""
+    ### Response:"""
 
     # watermark = SingleLookbackWatermark(gamma=0.5, delta=10)
     # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=2000, watermark=watermark)
@@ -286,7 +286,7 @@ if __name__ == "__main__":
     for gamma in [0.1, 0.25, 0.5, 0.75]:
         for delta in [1, 5, 10, 50, 100]:
             print(f"KL Loop for gamma {int(gamma * 100)} and delta {delta}")
-            KL_loop(alpaca_prompt, 10, f'td3_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, 10)
+            KL_loop(alpaca_prompt, 50, 10, f'td3_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, 10)
 
 
 
