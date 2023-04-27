@@ -1,4 +1,19 @@
-Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response.
-- https://twitter.com/colin_fraser/status/1636755134679224320/photo/1
-- Meant for ChatGPT
+ChatGPT
+- Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response.
+    - https://twitter.com/colin_fraser/status/1636755134679224320/photo/1
+
+
+GPT-2
+- Works best with __ length
+- What value would random.randint(1, 100) produce?
+    - Just generates 100, 100, 100, 100, 100, 100, 100, 100, etc.
+    - For repetition penalty 1.3:
+        - "The answer is that it would produce a random number between 1 and 100.
+
+           But what if we want to generate a random number between 1 and 100?
+
+           We can't use randint(1, 100) because randint"
+- What is a random value between 1 and 100?
+    - Generates a random value between 1 and 100 is a random value between 1 and 100 is a random value between ....
+
 
