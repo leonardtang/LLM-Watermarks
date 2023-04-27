@@ -9,6 +9,7 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 import openai
+import random
 import torch
 from api_keys import OPENAI_API_KEY
 from collections import defaultdict
@@ -83,6 +84,21 @@ def generate_random_digit(
     assert decode in ['beam', 'greedy', 'multinomial']
 
     if model_name == 'openai-api':
+        # TODO(ltang): imeplement Watemarks using logit_bias on OpenAI model
+        # Recover the gamma params and whatnot
+        if watermark:
+            logit_bias = {}
+            # TODO(ltang): figure out what the vocab size is actually supposed to be for each OpenAI model
+            # https://enjoymachinelearning.com/blog/the-gpt-3-vocabulary-size/
+            vocab_size = 175000
+            green_list_length = int(vocab_size * watermark.gamma)
+            indices_to_mask = random.sample(range(vocab_size), green_list_length)
+            # Note that logit_bias persists for the entire generation.
+            # So potentially want to re-feed in prompt
+            for idx in indices_to_mask:
+                logit_bias[idx] = watermark.delta
+        else:
+            logit_bias = None
         while True:
             try:
                 response = openai.Completion.create(
@@ -121,7 +137,7 @@ def generate_random_digit(
         pass
 
 
-def plot_digit_frequency(digits):
+def plot_digit_frequency(digits, output_file):
 
     print("Raw digits!", digits)
     # Construct dict for numerical reference
@@ -136,7 +152,8 @@ def plot_digit_frequency(digits):
         else:
             digit_counts[d] = 500
 
-    with open('digit_counts.json', 'w') as file:
+    numbered_out_file = output_file.split('.')[0] + random.getrandbits(8) + '.json'
+    with open(output_file, 'w') as file:
         json.dump(digit_counts, file, indent=4)
         
     plt.hist(digits, bins=100, range=(0, 100), alpha=0.7, density=True)
@@ -144,13 +161,17 @@ def plot_digit_frequency(digits):
     plt.ylabel('Frequency')
     plt.title(f'Digit Frequencies for {len(digits)} Samples')
     plt.legend()
-    plt.savefig('digit_freq.png')
+    png_file = numbered_out_file.split('.')[0] + '.png'
+    plt.savefig(png_file)
 
 
-def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='beam', length=10, repetitions=2000):
+def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='beam', length=10, repetitions=2000, watermark=None):
 
+    assert model_name in ['openai-api', 'gpt-2', 'alpaca-lora']
+    
     if model_name == 'openai-api':
         tokenizer = None
+        model = None
     elif model_name == 'gpt-2':
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = GPT2LMHeadModel.from_pretrained('gpt2-xl').to(device)
@@ -168,22 +189,24 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
     print(f"Sampling for {repetitions} repetitions")
     sampled_digits = []
     for _ in range(repetitions):
-        d = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine)
+        d = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
         sampled_digits.append(d)
     
     return sampled_digits
 
 
 if __name__ == "__main__":
+    prompt = "Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response."
     # prompt = "What is a random value between 1 and 100?"
     # Alpaca Prompt
-    alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
+    # alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
 
-    ### Instruction:
-    Generate a random number between 1 and 100.
+    # ### Instruction:
+    # Generate a random number between 1 and 100.
 
-    ### Response:"""
+    # ### Response:"""
 
-    digit_sample = repeatedly_sample(alpaca_prompt, 'alpaca-lora', engine=None, decode='beam', length=500, repetitions=100)
-    plot_digit_frequency(digit_sample)
+    watermark = SingleLookbackWatermark(gamma=0.5, delta=10)
+    digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=2000)
+    plot_digit_frequency(digit_sample, 'digit_counts_td3_05_10.json')
 
