@@ -5,6 +5,7 @@ Analyze the distribution of a single 'randomly generated' digit from a LLM
 # TODO(ltang): implement hard watermark, then soft watermark, on ONLY one token generation
 # See how it shifts distribution
 
+import datetime
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,8 +14,10 @@ import random
 import torch
 from api_keys import OPENAI_API_KEY
 from collections import defaultdict
-from watermark_playground import SingleLookbackWatermark
+from scipy import stats
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, LlamaTokenizer, LlamaForCausalLM
+from typing import List
+from watermark_playground import SingleLookbackWatermark
 
 openai.api_key = OPENAI_API_KEY
 device = torch.device("cuda:4") if torch.cuda.is_available() else torch.device("cpu")
@@ -85,7 +88,6 @@ def generate_random_digit(
 
     if model_name == 'openai-api':
         # TODO(ltang): imeplement Watemarks using logit_bias on OpenAI model
-        # Recover the gamma params and whatnot
         if watermark:
             logit_bias = {}
             # TODO(ltang): figure out what the vocab size is actually supposed to be for each OpenAI model
@@ -152,8 +154,10 @@ def plot_digit_frequency(digits, output_file):
         else:
             digit_counts[d] = 500
 
-    numbered_out_file = output_file.split('.')[0] + random.getrandbits(8) + '.json'
-    with open(output_file, 'w') as file:
+    now = datetime.datetime.now()
+    file_label = f"{str(now.month)}-{str(now.day)}-{str(now.hour)}-{str(now.minute)}"
+    numbered_out_file = output_file.split('.')[0] + '_' + file_label + '.json'
+    with open(numbered_out_file, 'w') as file:
         json.dump(digit_counts, file, indent=4)
         
     plt.hist(digits, bins=100, range=(0, 100), alpha=0.7, density=True)
@@ -165,7 +169,7 @@ def plot_digit_frequency(digits, output_file):
     plt.savefig(png_file)
 
 
-def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='beam', length=10, repetitions=2000, watermark=None):
+def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='beam', length=10, repetitions=2000, watermark=None) -> List:
 
     assert model_name in ['openai-api', 'gpt-2', 'alpaca-lora']
     
@@ -188,11 +192,70 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
     
     print(f"Sampling for {repetitions} repetitions")
     sampled_digits = []
-    for _ in range(repetitions):
+    for i in range(repetitions):
+        if i % (repetitions // 5) == 0: print(f'On repetition {i} of {repetitions}')
         d = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
         sampled_digits.append(d)
     
     return sampled_digits
+
+
+def KL(P, Q):
+    """ 
+    - Calculate KL divergence between P and Q
+    - Epsilon is used here to avoid conditional code for
+    checking that neither P nor Q is equal to 0 
+    """
+    epsilon = 0.00001
+
+    # You may want to instead make copies to avoid changing the np arrays.
+    P = P + epsilon
+    Q = Q + epsilon
+
+    divergence = np.sum(P * np.log(P / Q))
+    return divergence
+
+
+def KL_loop(num_dists, out_file, gamma, delta):
+    """
+    - Generate `num_dists` distributions and compute pairwise KL between them.
+    - Generate violin plot
+    - Return full list of KLs and also their summary stats
+    """
+
+    distributions = []
+    pairwise_KLs = []
+    watermark = SingleLookbackWatermark(gamma=gamma, delta=delta)
+    for _ in range(num_dists):
+        digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
+        # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=2000, watermark=watermark)
+        distributions.append(np.array(digit_sample))
+
+    for i, d_1 in enumerate(distributions):
+        for j, d_2 in enumerate(distributions):
+            # TODO(ltang): think about a better (symmetric) divergence metric
+            if i >= j: continue
+            kl = KL(d_1, d_2)
+            pairwise_KLs.append(kl)
+
+    kl_data = np.array(pairwise_KLs)
+    raw_data = np.array(distributions)
+    now = datetime.datetime.now()
+    file_label = f"{str(now.month)}-{str(now.day)}-{str(now.hour)}-{str(now.minute)}"
+    numbered_out_file = out_file.split('.')[0] + '_' + file_label + '.npy'
+    np.save(numbered_out_file, raw_data)
+
+    fig, ax = plt.subplots()
+    ax.violinplot(kl_data, showmeans=False, showmedians=True)
+    ax.set_title('Distribution of Pairwise KLs for Unmarked Model')
+    ax.set_ylabel('KL Divergence')
+
+    png_file = numbered_out_file.split('.')[0] + '.png'
+    plt.savefig(png_file)
+
+    print("Full Pairwise KL List:", pairwise_KLs)
+    print("Pairwise KL Summary Statistics")
+    print(stats.describe(kl_data))
 
 
 if __name__ == "__main__":
@@ -206,7 +269,17 @@ if __name__ == "__main__":
 
     # ### Response:"""
 
-    watermark = SingleLookbackWatermark(gamma=0.5, delta=10)
-    digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=2000)
-    plot_digit_frequency(digit_sample, 'digit_counts_td3_05_10.json')
+    # watermark = SingleLookbackWatermark(gamma=0.5, delta=10)
+    # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=2000, watermark=watermark)
+    # plot_digit_frequency(digit_sample, 'digit_counts_td3_05_10.json')
+
+    # KL_loop(10, 'td3_unmarked_rep_10.npy', 0.5, 10)
+
+    # Meta-loop over watermark params and see how they affect pairwise KL
+    for gamma in [0.1, 0.25, 0.5, 0.75]:
+        for delta in [1, 5, 10, 50, 100]:
+            print(f"KL Loop for gamma {int(gamma * 100)} and delta {delta}")
+            KL_loop(10, f'td3_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, 10)
+
+
 
