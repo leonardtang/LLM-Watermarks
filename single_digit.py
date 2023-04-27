@@ -30,57 +30,37 @@ def generate_from_model(
     repetition_penalty: float = 0.0001,
     logits_processors = [],
 ):
+    # Beam search multinomial sampling
     if decode == 'beam':
         print("decode is beam")
-        # TODO(ltang): refactor multinomial/greedy into here
-        outputs = model.generate(
-            input_ids,
-            min_length=length,
-            max_new_tokens=length,
-            num_beams=num_beams,
-            repetition_penalty=repetition_penalty,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.eos_token_id,
-            logits_processor=logits_processors,
-        )
-        # TODO(ltang): postprocess and check for first occurence of a number
-        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        print("GEnerated text", generated_text)
-        return generated_text
-    
-    else: 
-        print("decode is NOT beam")
-        with torch.no_grad():
-            for _ in range(length):
-                print("decoding one time step")    
-                logits = model(input_ids)
-                if watermark:
-                    mask = watermark(input_ids) 
-                else:
-                    mask = torch.zeros_like(logits[0][0][-1])
-                
-                # Mask bumps up certain tokens' probabilities in the vocabulary
-                logits[0][0][-1] += mask
-                probs = torch.softmax(logits[0][0][-1], dim=0)
-                
-                if decode == 'multinomial':
-                    sample = torch.multinomial(probs, 1)
-                elif decode == 'greedy':
-                    sample = torch.argmax(probs)
-                else:
-                    raise Exception
+        beam_count = num_beams
+        do_sample = True
+    elif decode == 'multinomial':
+        print("decode is multi")
+        beam_count = 1
+        do_sample = True
+    elif decode == 'greedy':
+        print("decode is greedy")
+        beam_count = 1
+        do_sample = False
+    else:
+        raise Exception
 
-                # TODO(ltang): think about if we need to consider shifting distribution of whitespace (e.g. \n, \t)
-                print("Sample:", sample)
-                if sample.item().isnumeric():
-                    return int(sample.item())
-
-                # Input window extends to include generated token
-                # Affects masker/watermark via `hash_tensor``
-                input_ids = torch.cat([input_ids, sample.unsqueeze(0)], dim=1)
-
-            # No digit produced. Just return number for now.
-            return -50
+    outputs = model.generate(
+        input_ids,
+        min_length=length,
+        max_new_tokens=length,
+        num_beams=num_beams,
+        repetition_penalty=repetition_penalty,
+        eos_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.eos_token_id,
+        logits_processor=logits_processors,
+        do_sample=True,
+    )
+    # TODO(ltang): postprocess and check for first occurence of a number
+    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print("Generated text", generated_text)
+    return generated_text
 
 
 def generate_random_digit(
@@ -197,12 +177,13 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
 if __name__ == "__main__":
     # prompt = "What is a random value between 1 and 100?"
     # Alpaca Prompt
-    prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
+    alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
 
     ### Instruction:
     Generate a random number between 1 and 100.
 
     ### Response:"""
-    digit_sample = repeatedly_sample(prompt, 'alpaca-lora', engine=None, decode='beam', length=500, repetitions=100)
+
+    digit_sample = repeatedly_sample(alpaca_prompt, 'alpaca-lora', engine=None, decode='beam', length=500, repetitions=100)
     plot_digit_frequency(digit_sample)
 
