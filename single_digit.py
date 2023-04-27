@@ -20,7 +20,7 @@ from typing import List
 from watermark_playground import SingleLookbackWatermark
 
 openai.api_key = OPENAI_API_KEY
-device = torch.device("cuda:4") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cuda:2") if torch.cuda.is_available() else torch.device("cpu")
 print("Device:", device)
 
 
@@ -222,7 +222,7 @@ def KL(P, Q):
     return divergence
 
 
-def KL_loop(num_dists, out_file, gamma, delta):
+def KL_loop(prompt, num_dists, out_file, gamma, delta):
     """
     - Generate `num_dists` distributions and compute pairwise KL between them.
     - Generate violin plot
@@ -234,7 +234,8 @@ def KL_loop(num_dists, out_file, gamma, delta):
     watermark = SingleLookbackWatermark(gamma=gamma, delta=delta)
     for _ in range(num_dists):
         # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
-        digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
+        # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
+        digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=10, repetitions=1000, watermark=watermark)
         distributions.append(np.array(digit_sample))
 
     for i, d_1 in enumerate(distributions):
@@ -285,7 +286,7 @@ if __name__ == "__main__":
     for gamma in [0.1, 0.25, 0.5, 0.75]:
         for delta in [1, 5, 10, 50, 100]:
             print(f"KL Loop for gamma {int(gamma * 100)} and delta {delta}")
-            KL_loop(10, f'td3_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, 10)
+            KL_loop(alpaca_prompt, 10, f'td3_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, 10)
 
 
 
