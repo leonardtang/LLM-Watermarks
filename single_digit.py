@@ -16,12 +16,12 @@ import torch
 from api_keys import OPENAI_API_KEY
 from collections import defaultdict
 from scipy import stats
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, LlamaTokenizer, LlamaForCausalLM
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, LlamaTokenizer, LlamaForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from typing import List
 from watermark_playground import SingleLookbackWatermark
 
 openai.api_key = OPENAI_API_KEY
-device = torch.device("cuda:9") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 print("Device:", device)
 
 # TODO(ltang): clean this up later
@@ -77,7 +77,7 @@ def generate_from_model(
     )
     # TODO(ltang): postprocess and check for first occurence of a number
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    # print("Generated text", generated_text)
+    print("Generated text", generated_text)
 
     # Postprocess response according to model type
     if model_name == 'openai-api':
@@ -87,7 +87,7 @@ def generate_from_model(
     elif model_name == 'alpaca-lora':
         split_text = alpaca_prompt
     elif model_name.startswith('flan-t5'):
-        split_text = flant5_prompt
+        split_text = flan_prompt
     
     try:
         # print("generated_text.split(split_text)?", generated_text.split(split_text))
@@ -192,7 +192,7 @@ def generate_random_digit(
     while True:
         int_digit = generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
         if int_digit is not None:
-            # print("Returned int_digit that is not None", int_digit)
+            print("Returned int_digit that is not None", int_digit)
             return int_digit
 
 
@@ -288,7 +288,8 @@ def KL_loop(prompt, length, num_dists, out_file, gamma, delta):
     for _ in range(num_dists):
         # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
         # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
-        digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
+        # digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
+        digit_sample = repeatedly_sample(prompt, 'flan-t5', decode='beam', length=length, repetitions=1000, watermark=watermark)
         distributions.append(np.array(digit_sample))
 
     for i, d_1 in enumerate(distributions):
