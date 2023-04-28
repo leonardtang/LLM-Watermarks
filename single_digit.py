@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import openai
 import random
+import re
 import torch
 from api_keys import OPENAI_API_KEY
 from collections import defaultdict
@@ -20,12 +21,25 @@ from typing import List
 from watermark_playground import SingleLookbackWatermark
 
 openai.api_key = OPENAI_API_KEY
-device = torch.device("cuda:2") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cuda:9") if torch.cuda.is_available() else torch.device("cpu")
 print("Device:", device)
+
+# TODO(ltang): clean this up later
+td3_prompt = "Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response."
+gpt2_prompt = "What value would random.randint(1, 100) produce?"
+# Alpaca Prompt
+alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+### Instruction:
+Generate a random number between 1 and 100.
+
+### Response:"""
+flan_prompt = "Generate a random number between 1 and 100."
 
 
 def generate_from_model(
     model, 
+    model_name,
     input_ids, 
     tokenizer,
     length: int,
@@ -36,15 +50,15 @@ def generate_from_model(
 ):
     # Beam search multinomial sampling
     if decode == 'beam':
-        print("decode is beam")
+        # print("decode is beam")
         beam_count = num_beams
         do_sample = True
     elif decode == 'multinomial':
-        print("decode is multi")
+        # print("decode is multi")
         beam_count = 1
         do_sample = True
     elif decode == 'greedy':
-        print("decode is greedy")
+        # print("decode is greedy")
         beam_count = 1
         do_sample = False
     else:
@@ -63,9 +77,40 @@ def generate_from_model(
     )
     # TODO(ltang): postprocess and check for first occurence of a number
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    print("Generated text", generated_text)
-    return generated_text
+    # print("Generated text", generated_text)
 
+    # Postprocess response according to model type
+    if model_name == 'openai-api':
+        split_text = td3_prompt
+    elif model_name == 'gpt-2':
+        split_text = gpt2_prompt
+    elif model_name == 'alpaca-lora':
+        split_text = alpaca_prompt
+    elif model_name.startswith('flan-t5'):
+        split_text = flant5_prompt
+    
+    try:
+        # print("generated_text.split(split_text)?", generated_text.split(split_text))
+        response_text = generated_text.split(split_text)[-1]
+    except Exception as e:
+        print(f"Exception during postprocess: {e}")
+    
+    # Return first integer in acceptable range we encounter in output
+    try:
+        token = float(re.findall('[-+]?(?:\d*\.*\d+)', response_text)[0])
+        if token in set(range(1, 100)):
+            return int(token)
+    except:
+        return None
+    # for token in response_text.split():
+    #     # print("Token: ", token)
+    #     if token.isnumeric():
+    #         # TODO(ltang): generalize this better later
+    #         # if token in set(range(1, 100)):
+    #         #     return int(token)
+
+    # TODO(ltang): Figure out what to do when you don't return any number
+    return None
 
 def generate_random_digit(
     prompt, 
@@ -85,11 +130,15 @@ def generate_random_digit(
     """
 
     assert decode in ['beam', 'greedy', 'multinomial']
+    # TODO(ltang): fix this hacky ass control flow
+    input_ids = torch.tensor(tokenizer.encode(prompt)).unsqueeze(0).to(device)
+    processor = [watermark] if watermark else []
+    repetition_penalty = 1
 
     if model_name == 'openai-api':
-        # TODO(ltang): imeplement Watemarks using logit_bias on OpenAI model
+        # TODO(ltang): figure out how to extend logit bias in OpenAI model
         if watermark:
-            print("Watermark in open-ai model")
+            # print("Watermark in open-ai model")
             logit_bias = {}
             # TODO(ltang): figure out what the vocab size is actually supposed to be for each OpenAI model
             # https://enjoymachinelearning.com/blog/the-gpt-3-vocabulary-size/
@@ -104,7 +153,7 @@ def generate_random_digit(
             logit_bias = None
         while True:
             try:
-                print("Trying to generate")
+                # print("Trying to generate")
                 response = openai.Completion.create(
                     engine=engine,
                     prompt=prompt,
@@ -123,26 +172,28 @@ def generate_random_digit(
                 # Or just catch general OpenAI server error 
                 continue
             else:
-                print("Break oops")
                 break
         
-        print("Generated a digit: ", int_digit)
+        # print("Generated a digit: ", int_digit)
         return int_digit
 
     # TODO(ltang): Analyze digit distribution of an open-source model with and without watermark
     elif model_name == 'gpt-2':
-        print("elif model_name == 'gpt-2':")
-        input_ids = torch.tensor(tokenizer.encode(prompt)).unsqueeze(0).to(device)
-        processor = [watermark] if watermark else []
-        generate_from_model(model, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
+        # print("elif model_name == 'gpt-2':"
+        pass
         
     elif model_name == 'alpaca-lora':
-        print("elif model_name == 'alpaca-lora':")
-        input_ids = torch.tensor(tokenizer.encode(prompt)).unsqueeze(0).to(device)
-        processor = [watermark] if watermark else []
-        generate_from_model(model, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1)
+        # print("elif model_name == 'alpaca-lora':")
+        pass
     else: 
         pass
+
+    # This decoding should work for all other models
+    while True:
+        int_digit = generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
+        if int_digit is not None:
+            # print("Returned int_digit that is not None", int_digit)
+            return int_digit
 
 
 def plot_digit_frequency(digits, output_file):
@@ -177,7 +228,7 @@ def plot_digit_frequency(digits, output_file):
 
 def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='beam', length=10, repetitions=2000, watermark=None) -> List:
 
-    assert model_name in ['openai-api', 'gpt-2', 'alpaca-lora']
+    assert model_name in ['openai-api', 'gpt-2', 'alpaca-lora', 'flan-t5']
     
     if model_name == 'openai-api':
         tokenizer = None
@@ -194,7 +245,9 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
             torch_dtype=torch.float16,
             device_map="auto",
         )
-
+    elif model_name.startswith("flan-t5"):
+        tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-xxl')
+        model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-xxl')
     
     print(f"Sampling for {repetitions} repetitions")
     sampled_digits = []
@@ -266,16 +319,6 @@ def KL_loop(prompt, length, num_dists, out_file, gamma, delta):
 
 
 if __name__ == "__main__":
-    # prompt = "Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response."
-    # prompt = "What is a random value between 1 and 100?"
-    # Alpaca Prompt
-    alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
-
-    ### Instruction:
-    Generate a random number between 1 and 100.
-
-    ### Response:"""
-
     # watermark = SingleLookbackWatermark(gamma=0.5, delta=10)
     # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=2000, watermark=watermark)
     # plot_digit_frequency(digit_sample, 'digit_counts_td3_05_10.json')
@@ -286,7 +329,8 @@ if __name__ == "__main__":
     for gamma in [0.1, 0.25, 0.5, 0.75]:
         for delta in [1, 5, 10, 50, 100]:
             print(f"KL Loop for gamma {int(gamma * 100)} and delta {delta}")
-            KL_loop(alpaca_prompt, 50, 10, f'td3_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, 10)
+            # KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+            KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
 
 
 
