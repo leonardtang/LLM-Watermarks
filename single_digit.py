@@ -401,13 +401,13 @@ if __name__ == "__main__":
                 # KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 # torch.save(logits, f'flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
-                with open("flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt".format(gamma, delta), 'wb') as f:
+                with open("flan_logits_marked_g{}_d{}.pt".format(int(gamma * 100), delta), 'wb') as f:
                     pickle.dump(logits_tuple, f)
                 
                 
                 # logits_tuple = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 # # torch.save(logits, f'alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
-                # with open("alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt".format(gamma, delta), 'wb') as f:
+                # with open("alpaca_logits_marked_g{}_d{}.pt".format(int(gamma * 100), delta), 'wb') as f:
                 #     pickle.dump(logits_tuple, f)
             
 
