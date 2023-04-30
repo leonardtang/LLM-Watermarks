@@ -277,7 +277,8 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
     # return sampled_digits
 
     # RETURN LOGITS
-    logits_tuple = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark).cpu()
+    logits_tuple = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
+    logits_tuple = [l.cpu() for l in logits_tuple]
     return logits_tuple
     
 
