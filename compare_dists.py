@@ -5,6 +5,7 @@ from single_digit import KL
 
 def compare(unmarked_file, watermarked_file, out_file):
     
+    # Array of distributions
     unmarked_dists = np.load(unmarked_file)
     watermarked_dists = np.load(watermarked_file)
 
@@ -26,4 +27,5 @@ def compare(unmarked_file, watermarked_file, out_file):
 
 
 if __name__ == "__main__":
-    compare('td3_marked', 'td3_unmarked', 'td3_compare.png')
+    # Example call
+    compare('alpaca_marked_g10_d1_rep_10_4-28-17-36.npy', 'alpaca_unmarked.npy', 'alpaca_compare.png')

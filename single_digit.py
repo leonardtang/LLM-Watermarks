@@ -21,7 +21,7 @@ from typing import List
 from watermark_playground import SingleLookbackWatermark
 
 openai.api_key = OPENAI_API_KEY
-device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cuda:2") if torch.cuda.is_available() else torch.device("cpu")
 print("Device:", device)
 
 # TODO(ltang): clean this up later
@@ -34,7 +34,7 @@ alpaca_prompt = """Below is an instruction that describes a task. Write a respon
 Generate a random number between 1 and 100.
 
 ### Response:"""
-flan_prompt = "Generate a random number between 1 and 100."
+flan_prompt = "Pick a random integer between 1 and 100. Just return the number, don't include any other text or punctuation in the response."
 
 
 def generate_from_model(
@@ -68,13 +68,19 @@ def generate_from_model(
         input_ids,
         min_length=length,
         max_new_tokens=length,
-        num_beams=num_beams,
+        # num_beams=num_beams,
         repetition_penalty=repetition_penalty,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.eos_token_id,
         logits_processor=logits_processors,
-        do_sample=True,
+        # do_sample=True,
+        do_sample=False,
+        output_scores = True,
+        return_dict_in_generate=True
     )
+
+    return outputs.scores
+
     # TODO(ltang): postprocess and check for first occurence of a number
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
     print("Generated text", generated_text)
@@ -97,7 +103,9 @@ def generate_from_model(
     
     # Return first integer in acceptable range we encounter in output
     try:
-        token = float(re.findall('[-+]?(?:\d*\.*\d+)', response_text)[0])
+        # token = float(re.findall('[-+]?(?:\d*\.*\d+)', response_text)[0])
+        # https://stackoverflow.com/questions/4289331/how-to-extract-numbers-from-a-string-in-python (see the one with like 110 upvotes)
+        token = float(re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?", response_text)[0])
         if token in set(range(1, 100)):
             return int(token)
     except:
@@ -188,12 +196,14 @@ def generate_random_digit(
     else: 
         pass
 
-    # This decoding should work for all other models
-    while True:
-        int_digit = generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
-        if int_digit is not None:
-            print("Returned int_digit that is not None", int_digit)
-            return int_digit
+    # # This decoding should work for all other models
+    # while True:
+    #     int_digit = generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
+    #     if int_digit is not None:
+    #         print("Returned int_digit that is not None", int_digit)
+    #         return int_digit
+
+    return generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
 
 
 def plot_digit_frequency(digits, output_file):
@@ -239,24 +249,38 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
         vocab_size = model.config.vocab_size
     elif model_name == 'alpaca-lora':
         tokenizer = LlamaTokenizer.from_pretrained("chainyo/alpaca-lora-7b")
+        print("Done Loading Alpaca Tokenizer")
         model = LlamaForCausalLM.from_pretrained(
             "chainyo/alpaca-lora-7b",
-            load_in_8bit=True,
-            torch_dtype=torch.float16,
-            device_map="auto",
-        )
+            # load_in_8bit=True,
+            torch_dtype=torch.float16
+            # device_map="auto",
+        ).to(device)
+        print("Done Loading Alpaca Model")
     elif model_name.startswith("flan-t5"):
-        tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-xxl')
-        model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-xxl')
+        # tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-xxl')
+        tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-large')
+        print("Done Loading Flan Tokenizer")
+        # model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-xxl').to(device)
+        model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-large').to(device)
+        print("Done Loading Flan Model")
     
     print(f"Sampling for {repetitions} repetitions")
-    sampled_digits = []
-    for i in range(repetitions):
-        if i % (repetitions // 5) == 0: print(f'On repetition {i} of {repetitions}')
-        d = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
-        sampled_digits.append(d)
+
+    # RETURN SAMPLE DIGITS
+    # sampled_digits = []
+    # for i in range(repetitions):
+    #     if i % (repetitions // 5) == 0: print(f'On repetition {i} of {repetitions}')
+    #     d = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
+    #     sampled_digits.append(d)
     
-    return sampled_digits
+    # return sampled_digits
+
+    # RETURN LOGITS
+    logits_tuple = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark).cpu()
+    return logits_tuple
+    
+
 
 
 def KL(P, Q):
@@ -284,39 +308,48 @@ def KL_loop(prompt, length, num_dists, out_file, gamma, delta):
 
     distributions = []
     pairwise_KLs = []
-    watermark = SingleLookbackWatermark(gamma=gamma, delta=delta)
-    for _ in range(num_dists):
-        # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
-        # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
-        # digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
-        digit_sample = repeatedly_sample(prompt, 'flan-t5', decode='beam', length=length, repetitions=1000, watermark=watermark)
-        distributions.append(np.array(digit_sample))
+    if gamma is not None and gamma > 0 and delta is not None and delta > 0:
+        watermark = SingleLookbackWatermark(gamma=gamma, delta=delta)
+    else: 
+        watermark = None
 
-    for i, d_1 in enumerate(distributions):
-        for j, d_2 in enumerate(distributions):
-            # TODO(ltang): think about a better (symmetric) divergence metric
-            if i >= j: continue
-            kl = KL(d_1, d_2)
-            pairwise_KLs.append(kl)
+    # RAW GENERATIONS        
+    # for _ in range(num_dists):
+    #     # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
+    #     # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
+    #     # digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
+    #     digit_sample = repeatedly_sample(prompt, 'flan-t5', decode='beam', length=length, repetitions=1000, watermark=watermark)
+    #     # We can probably also take a KL between each massive distribution (just sum up across each of 1000 dists)
+    #     distributions.append(np.array(digit_sample))
 
-    kl_data = np.array(pairwise_KLs)
-    raw_data = np.array(distributions)
-    now = datetime.datetime.now()
-    file_label = f"{str(now.month)}-{str(now.day)}-{str(now.hour)}-{str(now.minute)}"
-    numbered_out_file = out_file.split('.')[0] + '_' + file_label + '.npy'
-    np.save(numbered_out_file, raw_data)
+    # for i, d_1 in enumerate(distributions):
+    #     for j, d_2 in enumerate(distributions):
+    #         # TODO(ltang): think about a better (symmetric) divergence metric
+    #         if i >= j: continue
+    #         kl = KL(d_1, d_2)
+    #         pairwise_KLs.append(kl)
 
-    fig, ax = plt.subplots()
-    ax.violinplot(kl_data, showmeans=False, showmedians=True)
-    ax.set_title('Distribution of Pairwise KLs for Unmarked Model')
-    ax.set_ylabel('KL Divergence')
+    # kl_data = np.array(pairwise_KLs)
+    # raw_data = np.array(distributions)
+    # now = datetime.datetime.now()
+    # file_label = f"{str(now.month)}-{str(now.day)}-{str(now.hour)}-{str(now.minute)}"
+    # numbered_out_file = out_file.split('.')[0] + '_' + file_label + '.npy'
+    # np.save(numbered_out_file, raw_data)
 
-    png_file = numbered_out_file.split('.')[0] + '.png'
-    plt.savefig(png_file)
+    # fig, ax = plt.subplots()
+    # ax.violinplot(kl_data, showmeans=False, showmedians=True)
+    # ax.set_title('Distribution of Pairwise KLs for Unmarked Model')
+    # ax.set_ylabel('KL Divergence')
 
-    print("Full Pairwise KL List:", pairwise_KLs)
-    print("Pairwise KL Summary Statistics")
-    print(stats.describe(kl_data))
+    # png_file = numbered_out_file.split('.')[0] + '.png'
+    # plt.savefig(png_file)
+
+    # print("Full Pairwise KL List:", pairwise_KLs)
+    # print("Pairwise KL Summary Statistics")
+    # print(stats.describe(kl_data))
+
+    # SAVE LOGITS
+    return repeatedly_sample(prompt, 'flan-t5', decode='greedy', length=length, repetitions=1000, watermark=watermark)
 
 
 if __name__ == "__main__":
@@ -327,11 +360,51 @@ if __name__ == "__main__":
     # KL_loop(10, 'td3_unmarked_rep_10.npy', 0.5, 10)
 
     # Meta-loop over watermark params and see how they affect pairwise KL
-    for gamma in [0.1, 0.25, 0.5, 0.75]:
-        for delta in [1, 5, 10, 50, 100]:
-            print(f"KL Loop for gamma {int(gamma * 100)} and delta {delta}")
-            # KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
-            KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+    # for gamma in [0.1, 0.25, 0.5, 0.75]:
+    #     for delta in [1, 5, 10, 50, 100]:
+    #         print(f"KL Loop for gamma {int(gamma * 100)} and delta {delta}")
+    #         # KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+    #         KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+
+    # Unmarked model
+    # KL_loop(alpaca_prompt, 10, 10, f'alpaca_unmarked.npy', None, None)
+    # KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+
+    # SAVE LOG PROBS
+    for gamma in [0, 0.1, 0.25, 0.5, 0.75]:
+        for delta in [0, 1, 5, 10, 50, 100]:
+            # Unmarked model
+            if gamma == 0 and delta == 0:
+                logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+                # torch.save(logits, f'flan_logits_unmarked.pt', gamma, delta)
+                with open(f'flan_logits_unmarked.pt', gamma, delta, 'wb') as f:
+                    pickle.dump(logits_tuple, f)
+
+
+                # logits = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+                # torch.save(logits, f'alpaca_logits_unmarked.pt', gamma, delta)
+                # with open(f'alpaca_logits_unmarked.pt', gamma, delta, 'wb') as f:
+                #     pickle.dump(logits_tuple, f)
+                
+            # Don't bother since we already have unmarked
+            elif gamma == 0 or delta == 0:
+                continue
+        
+            # Watermarked model of various strength
+            else:    
+                print(f"Save log-prob loop for gamma {int(gamma * 100)} and delta {delta}")
+                # KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+                logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+                # torch.save(logits, f'flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
+                with open(f'flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta, 'wb') as f:
+                    pickle.dump(logits_tuple, f)
+                
+                
+                # logits_tuple = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+                # # torch.save(logits, f'alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
+                # with open(f'alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta, 'wb') as f:
+                #     pickle.dump(logits_tuple, f)
+            
 
 
 
