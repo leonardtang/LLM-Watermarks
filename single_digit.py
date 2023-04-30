@@ -19,6 +19,10 @@ from scipy import stats
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, LlamaTokenizer, LlamaForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from typing import List
 from watermark_playground import SingleLookbackWatermark
+import os
+import pickle
+
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 openai.api_key = OPENAI_API_KEY
 device = torch.device("cuda:2") if torch.cuda.is_available() else torch.device("cpu")
@@ -259,10 +263,10 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
         print("Done Loading Alpaca Model")
     elif model_name.startswith("flan-t5"):
         # tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-xxl')
-        tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-large')
+        tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-xxl')
         print("Done Loading Flan Tokenizer")
         # model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-xxl').to(device)
-        model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-large').to(device)
+        model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-xxl').to(device)
         print("Done Loading Flan Model")
     
     print(f"Sampling for {repetitions} repetitions")
@@ -378,13 +382,13 @@ if __name__ == "__main__":
             if gamma == 0 and delta == 0:
                 logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 # torch.save(logits, f'flan_logits_unmarked.pt', gamma, delta)
-                with open(f'flan_logits_unmarked.pt', gamma, delta, 'wb') as f:
+                with open(f'flan_logits_unmarked.pt', 'wb') as f:
                     pickle.dump(logits_tuple, f)
 
 
                 # logits = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 # torch.save(logits, f'alpaca_logits_unmarked.pt', gamma, delta)
-                # with open(f'alpaca_logits_unmarked.pt', gamma, delta, 'wb') as f:
+                # with open(f'alpaca_logits_unmarked.pt', 'wb') as f:
                 #     pickle.dump(logits_tuple, f)
                 
             # Don't bother since we already have unmarked
@@ -397,13 +401,13 @@ if __name__ == "__main__":
                 # KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 # torch.save(logits, f'flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
-                with open(f'flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta, 'wb') as f:
+                with open("flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt".format(gamma, delta), 'wb') as f:
                     pickle.dump(logits_tuple, f)
                 
                 
                 # logits_tuple = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 # # torch.save(logits, f'alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
-                # with open(f'alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta, 'wb') as f:
+                # with open("alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt".format(gamma, delta), 'wb') as f:
                 #     pickle.dump(logits_tuple, f)
             
 
