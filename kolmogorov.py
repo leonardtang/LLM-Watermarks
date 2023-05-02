@@ -7,7 +7,7 @@ import numpy as np
 import os
 from scipy import stats
 
-
+# TODO(ltang): test these with repeated distributions instead
 def ks_test(unmarked_file, watermarked_file):
     
     unmarked_dist = np.concatenate(np.load(unmarked_file))

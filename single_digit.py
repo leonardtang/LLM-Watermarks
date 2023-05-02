@@ -2,8 +2,7 @@
 Analyze the distribution of a single 'randomly generated' digit from a LLM
 """
 
-# TODO(ltang): implement hard watermark, then soft watermark, on ONLY one token generation
-# See how it shifts distribution
+#TODO(ltang): write control flow for logit saving vs. sampling
 
 import datetime
 import json
@@ -72,18 +71,22 @@ def generate_from_model(
         input_ids,
         min_length=length,
         max_new_tokens=length,
+        num_beams=num_beams,
+        # FOR LOGITS
         # num_beams=num_beams,
         repetition_penalty=repetition_penalty,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.eos_token_id,
         logits_processor=logits_processors,
-        # do_sample=True,
-        do_sample=False,
-        output_scores = True,
-        return_dict_in_generate=True
+        do_sample=True,
+        # FOR LOGITS 
+        # do_sample=False, 
+        # output_scores = True,
+        # return_dict_in_generate=True
     )
 
-    return outputs.scores
+    # SAMPLING LOGITS
+    # return outputs.scores
 
     # TODO(ltang): postprocess and check for first occurence of a number
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -114,12 +117,13 @@ def generate_from_model(
             return int(token)
     except:
         return None
-    # for token in response_text.split():
-    #     # print("Token: ", token)
-    #     if token.isnumeric():
-    #         # TODO(ltang): generalize this better later
-    #         # if token in set(range(1, 100)):
-    #         #     return int(token)
+    # SAMPLING DIGITS
+    for token in response_text.split():
+        # print("Token: ", token)
+        if token.isnumeric():
+            # TODO(ltang): generalize this better later
+            if token in set(range(1, 100)):
+                return int(token)
 
     # TODO(ltang): Figure out what to do when you don't return any number
     return None
@@ -200,14 +204,14 @@ def generate_random_digit(
     else: 
         pass
 
-    # # This decoding should work for all other models
-    # while True:
-    #     int_digit = generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
-    #     if int_digit is not None:
-    #         print("Returned int_digit that is not None", int_digit)
-    #         return int_digit
+    # This decoding should work for all other models
+    while True:
+        int_digit = generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
+        if int_digit is not None:
+            print("Returned int_digit that is not None", int_digit)
+            return int_digit
 
-    return generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
+    # return generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
 
 
 def plot_digit_frequency(digits, output_file):
@@ -272,18 +276,18 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
     print(f"Sampling for {repetitions} repetitions")
 
     # RETURN SAMPLE DIGITS
-    # sampled_digits = []
-    # for i in range(repetitions):
-    #     if i % (repetitions // 5) == 0: print(f'On repetition {i} of {repetitions}')
-    #     d = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
-    #     sampled_digits.append(d)
+    sampled_digits = []
+    for i in range(repetitions):
+        if i % (repetitions // 5) == 0: print(f'On repetition {i} of {repetitions}')
+        d = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
+        sampled_digits.append(d)
     
-    # return sampled_digits
+    return sampled_digits
 
     # RETURN LOGITS
-    logits_tuple = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
-    logits_tuple = [l.cpu() for l in logits_tuple]
-    return logits_tuple
+    # logits_tuple = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
+    # logits_tuple = [l.cpu() for l in logits_tuple]
+    # return logits_tuple
     
 
 
@@ -319,13 +323,15 @@ def KL_loop(prompt, length, num_dists, out_file, gamma, delta):
         watermark = None
 
     # RAW GENERATIONS        
-    # for _ in range(num_dists):
-    #     # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
-    #     # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
-    #     # digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
-    #     digit_sample = repeatedly_sample(prompt, 'flan-t5', decode='beam', length=length, repetitions=1000, watermark=watermark)
-    #     # We can probably also take a KL between each massive distribution (just sum up across each of 1000 dists)
-    #     distributions.append(np.array(digit_sample))
+    for _ in range(num_dists):
+        # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
+        # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
+        # digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
+        digit_sample = repeatedly_sample(prompt, 'flan-t5', decode='beam', length=length, repetitions=1000, watermark=watermark)
+        # We can probably also take a KL between each massive distribution (just sum up across each of 1000 dists)
+        print("digit_sample", digit_sample)
+        print("type(digit_sample)", type(digit_sample))
+        distributions.append(np.array(digit_sample))
 
     # for i, d_1 in enumerate(distributions):
     #     for j, d_2 in enumerate(distributions):
@@ -353,8 +359,8 @@ def KL_loop(prompt, length, num_dists, out_file, gamma, delta):
     # print("Pairwise KL Summary Statistics")
     # print(stats.describe(kl_data))
 
-    # SAVE LOGITS
-    return repeatedly_sample(prompt, 'flan-t5', decode='greedy', length=length, repetitions=1000, watermark=watermark)
+    # # SAVE LOGITS
+    # return repeatedly_sample(prompt, 'flan-t5', decode='greedy', length=length, repetitions=1000, watermark=watermark)
 
 
 if __name__ == "__main__":
@@ -373,42 +379,42 @@ if __name__ == "__main__":
 
     # Unmarked model
     # KL_loop(alpaca_prompt, 10, 10, f'alpaca_unmarked.npy', None, None)
-    # KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+    KL_loop(flan_prompt, 10, 10, f'flan_unmarked.npy', None, None)
 
-    # SAVE LOG PROBS
-    for gamma in [0, 0.1, 0.25, 0.5, 0.75]:
-        for delta in [0, 1, 5, 10, 50, 100]:
-            # Unmarked model
-            if gamma == 0 and delta == 0:
-                logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
-                # torch.save(logits, f'flan_logits_unmarked.pt', gamma, delta)
-                with open(f'flan_logits_unmarked.pt', 'wb') as f:
-                    pickle.dump(logits_tuple, f)
+    # # SAVE LOG PROBS
+    # for gamma in [0, 0.1, 0.25, 0.5, 0.75]:
+    #     for delta in [0, 1, 5, 10, 50, 100]:
+    #         # Unmarked model
+    #         if gamma == 0 and delta == 0:
+    #             logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+    #             # torch.save(logits, f'flan_logits_unmarked.pt', gamma, delta)
+    #             with open(f'flan_logits_unmarked.pt', 'wb') as f:
+    #                 pickle.dump(logits_tuple, f)
 
 
-                # logits = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
-                # torch.save(logits, f'alpaca_logits_unmarked.pt', gamma, delta)
-                # with open(f'alpaca_logits_unmarked.pt', 'wb') as f:
-                #     pickle.dump(logits_tuple, f)
+    #             # logits = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+    #             # torch.save(logits, f'alpaca_logits_unmarked.pt', gamma, delta)
+    #             # with open(f'alpaca_logits_unmarked.pt', 'wb') as f:
+    #             #     pickle.dump(logits_tuple, f)
                 
-            # Don't bother since we already have unmarked
-            elif gamma == 0 or delta == 0:
-                continue
+    #         # Don't bother since we already have unmarked
+    #         elif gamma == 0 or delta == 0:
+    #             continue
         
-            # Watermarked model of various strength
-            else:    
-                print(f"Save log-prob loop for gamma {int(gamma * 100)} and delta {delta}")
-                # KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
-                logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
-                # torch.save(logits, f'flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
-                with open("flan_logits_marked_g{}_d{}.pt".format(int(gamma * 100), delta), 'wb') as f:
-                    pickle.dump(logits_tuple, f)
+    #         # Watermarked model of various strength
+    #         else:    
+    #             print(f"Save log-prob loop for gamma {int(gamma * 100)} and delta {delta}")
+    #             # KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+    #             logits_tuple = KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+    #             # torch.save(logits, f'flan_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
+    #             with open("flan_logits_marked_g{}_d{}.pt".format(int(gamma * 100), delta), 'wb') as f:
+    #                 pickle.dump(logits_tuple, f)
                 
                 
-                # logits_tuple = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
-                # # torch.save(logits, f'alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
-                # with open("alpaca_logits_marked_g{}_d{}.pt".format(int(gamma * 100), delta), 'wb') as f:
-                #     pickle.dump(logits_tuple, f)
+    #             # logits_tuple = KL_loop(alpaca_prompt, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+    #             # # torch.save(logits, f'alpaca_logits_marked_g{int(gamma * 100)}_d{delta}.pt', gamma, delta)
+    #             # with open("alpaca_logits_marked_g{}_d{}.pt".format(int(gamma * 100), delta), 'wb') as f:
+    #             #     pickle.dump(logits_tuple, f)
             
 
 
