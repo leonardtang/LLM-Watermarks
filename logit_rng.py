@@ -21,11 +21,13 @@ def sample_from_logits(vocab, logit_file, sample_size=1000):
     with open(logit_file, 'rb') as file:
         logits = pickle.load(file)
     # Since the 1st generated token is always whitespace, we look at the 2nd token distribution
-    rng_logits = logits[2].numpy()[0]
+    rng_logits = logits[0].numpy()[0]
     # Stable softmax
     z = rng_logits - max(rng_logits)
     rng_dist = np.exp(z) / np.sum(np.exp(z)) 
-    print("rng_dist", rng_dist)
+    print("rng_dist", rng_dist.size)
+    print("vocab length", len(vocab))
+    input()
 
     i = 0
     sample = []
@@ -35,14 +37,20 @@ def sample_from_logits(vocab, logit_file, sample_size=1000):
             f.write("%s\n" % item)
 
     while i < sample_size: 
-        raw_generation = str(np.random.choice(rng_dist))
+        # raw_generation = str(np.random.choice(rng_dist))
         sampled_item = np.random.choice(list(vocab.keys()), p=rng_dist)
         print("sampled_item", sampled_item)
         # .read().decode('utf-8')
-        token = float(re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?", raw_generation)[0])
-        if token in set(range(1, 100)):
-            sample.append(token)
-            i += 1
+        try:
+            token = float(re.findall("[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?", sampled_item)[0])
+            print("OMG")
+            break
+            if token in set(range(1, 100)):
+                sample.append(token)
+                i += 1
+        except Exception as e:
+            # print(f"Exception while sampling: {e}")
+            continue
         
     return sample
 
@@ -85,13 +93,20 @@ def sample_from_logits(vocab, logit_file, sample_size=1000):
 
 def main():
 
-    tokenizer = AutoTokenizer.from_pretrained('chainyo/alpaca-lora-7b')
-    print("Loaded tokenizer!")
-    sample = np.array(sample_from_logits(tokenizer.get_vocab(), 'logits/alpaca_logits_unmarked.pt'))
+    with open('alpaca_vocab.pkl', 'rb') as f:
+        vocab = pickle.load(f)
+
+    print("Loaded Alpaca vocab!")
+    # sample = np.array(sample_from_logits(tokenizer.get_vocab(), 'logits/alpaca_logits_unmarked.pt'))
+    sample = np.array(sample_from_logits(vocab, 'logits/alpaca_logits_marked_g75_d100.pt'))
     np.save('rng/alpaca_unmarked.npy', sample)    
     
-    
-    # sample = sample_from_logits('logits/alpaca_logits_unmarked.pt')
+    # tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-xxl')
+    # vocab = tokenizer.get_vocab()
+    # with open('alpaca_vocab.pkl', 'wb') as f:
+    #     pickle.dump(vocab, f)
+    # print("Loaded Flan tokenizer!")
+    # sample = np.array(sample_from_logits(tokenizer.get_vocab(), 'logits/flan_logits_unmarked.pt'))
 
 if __name__ == "__main__":
     main()

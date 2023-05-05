@@ -10,17 +10,32 @@ from scipy import stats
 # TODO(ltang): test these with repeated distributions instead
 def ks_test(unmarked_file, watermarked_file):
     
-    unmarked_dist = np.concatenate(np.load(unmarked_file))
-    watermarked_dist = np.concatenate(np.load(watermarked_file))
-
-    assert len(unmarked_dist) == len(watermarked_dist)
     print(f"Unmarked File: {unmarked_file}")
     print(f"Watermarked File: {watermarked_file}")
-    print(f"Total Sample Size: {len(unmarked_dist)}")
+    
+    ## Treat as one big distribution
+    # unmarked_dist = np.concatenate(np.load(unmarked_file))
+    # watermarked_dist = np.concatenate(np.load(watermarked_file))
+    # assert len(unmarked_dist) == len(watermarked_dist)
+    # print(f"Total Sample Size: {len(unmarked_dist)}")
 
-    # Hope this can just take in np.arrays
-    test_res = stats.kstest(unmarked_dist, watermarked_dist)
-    return test_res.statistic, test_res.pvalue
+    ## Hope this can just take in np.arrays
+    # test_res = stats.kstest(unmarked_dist, watermarked_dist)
+    # return test_res.statistic, test_res.pvalue
+
+    # Average across samples
+    avg_stat, avg_p = 0, 0
+    unmarked_dists = np.load(unmarked_file)
+    watermarked_dists = np.load(watermarked_file)
+
+    for u in unmarked_dists:
+        for w in watermarked_dists:
+            test_res = stats.kstest(u, w)
+            avg_stat += test_res.statistic
+            avg_p += test_res.pvalue
+
+    total_pw = len(unmarked_dists) * len(watermarked_dists)
+    return avg_stat / total_pw, avg_p / total_pw
 
 
 def iter_dir(dir_name='rng'):
@@ -38,10 +53,6 @@ def iter_dir(dir_name='rng'):
     alpaca_ks = {}
     flan_ks = {}
 
-    # Fix this later LOL, testing since we don't have unmarked RNG files for now
-    alpaca_unmarked_fp = 'rng/alpaca_marked_g10_d1_rep_10_4-28-17-36.npy'
-    flan_unmarked_fp = 'rng/flan_marked_g10_d1_rep_10_4-28-18-2.npy'
-
     for filename in os.listdir(dir_name):
         if filename.endswith('.npy'):
             file_path = os.path.join(dir_name, filename)
@@ -53,6 +64,8 @@ def iter_dir(dir_name='rng'):
                 flan_ks[filename] = p_val
 
     
+    alpaca_ks, flan_ks = dict(sorted(alpaca_ks.items())), dict(sorted(flan_ks.items()))
+
     with open('alpaca_ks.json', "w") as outfile:
         json.dump(alpaca_ks, outfile, indent=4)
     

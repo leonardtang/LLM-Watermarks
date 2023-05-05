@@ -211,6 +211,7 @@ def generate_random_digit(
             print("Returned int_digit that is not None", int_digit)
             return int_digit
 
+    # SAVE DIGITS
     # return generate_from_model(model, model_name, input_ids, tokenizer, length, decode, logits_processors=processor, repetition_penalty=1.3)
 
 
@@ -288,7 +289,6 @@ def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='bea
     # logits_tuple = generate_random_digit(prompt, tokenizer, model_name, model=model, length=length, decode=decode, engine=engine, watermark=watermark)
     # logits_tuple = [l.cpu() for l in logits_tuple]
     # return logits_tuple
-    
 
 
 
@@ -326,8 +326,8 @@ def KL_loop(prompt, length, num_dists, out_file, gamma, delta):
     for _ in range(num_dists):
         # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000)
         # digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
-        # digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
-        digit_sample = repeatedly_sample(prompt, 'flan-t5', decode='beam', length=length, repetitions=1000, watermark=watermark)
+        digit_sample = repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark)
+        # digit_sample = repeatedly_sample(prompt, 'flan-t5', decode='beam', length=length, repetitions=1000, watermark=watermark)
         # We can probably also take a KL between each massive distribution (just sum up across each of 1000 dists)
         print("digit_sample", digit_sample)
         print("type(digit_sample)", type(digit_sample))
@@ -341,11 +341,11 @@ def KL_loop(prompt, length, num_dists, out_file, gamma, delta):
     #         pairwise_KLs.append(kl)
 
     # kl_data = np.array(pairwise_KLs)
-    # raw_data = np.array(distributions)
-    # now = datetime.datetime.now()
-    # file_label = f"{str(now.month)}-{str(now.day)}-{str(now.hour)}-{str(now.minute)}"
-    # numbered_out_file = out_file.split('.')[0] + '_' + file_label + '.npy'
-    # np.save(numbered_out_file, raw_data)
+    raw_data = np.array(distributions)
+    now = datetime.datetime.now()
+    file_label = f"{str(now.month)}-{str(now.day)}-{str(now.hour)}-{str(now.minute)}"
+    numbered_out_file = out_file.split('.')[0] + '_' + file_label + '.npy'
+    np.save(numbered_out_file, raw_data)
 
     # fig, ax = plt.subplots()
     # ax.violinplot(kl_data, showmeans=False, showmedians=True)
@@ -378,8 +378,8 @@ if __name__ == "__main__":
     #         KL_loop(flan_prompt, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
 
     # Unmarked model
-    # KL_loop(alpaca_prompt, 10, 10, f'alpaca_unmarked.npy', None, None)
-    KL_loop(flan_prompt, 10, 10, f'flan_unmarked.npy', None, None)
+    KL_loop(alpaca_prompt, 10, 10, f'alpaca_unmarked.npy', None, None)
+    # KL_loop(flan_prompt, 10, 10, f'flan_unmarked.npy', None, None)
 
     # # SAVE LOG PROBS
     # for gamma in [0, 0.1, 0.25, 0.5, 0.75]:
