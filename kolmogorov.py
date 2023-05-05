@@ -18,8 +18,6 @@ def ks_test(unmarked_file, watermarked_file):
     # watermarked_dist = np.concatenate(np.load(watermarked_file))
     # assert len(unmarked_dist) == len(watermarked_dist)
     # print(f"Total Sample Size: {len(unmarked_dist)}")
-
-    ## Hope this can just take in np.arrays
     # test_res = stats.kstest(unmarked_dist, watermarked_dist)
     # return test_res.statistic, test_res.pvalue
 
@@ -49,7 +47,7 @@ def iter_dir(dir_name='rng'):
             if 'flan' in filename and 'unmarked' in filename:
                 flan_unmarked_fp = file_path
             
-    # Actually do tests
+    # Perform K-S tests
     alpaca_ks = {}
     flan_ks = {}
 
