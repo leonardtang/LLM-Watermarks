@@ -8,6 +8,12 @@ import json
 import os
 import pickle
 import re
+from scipy import stats
+
+
+# TODO(ltang): perform some analysis on logits...? Canonical papers on this topic?
+def analyze_logits(dist):
+    print()
 
 
 def construct_lorenz(logit_file):
@@ -18,7 +24,7 @@ def construct_lorenz(logit_file):
     # TODO(ltang): investigate which index to select logits from
     logits = logits[1].numpy()[0]
 
-    # TODO(ltang): figure out how to deal with probability vs. logits
+    # TODO(ltang): figure out how to deal with probability vs. logits in theory/math
     z = logits - max(logits)
     probs = np.exp(z) / np.sum(np.exp(z)) 
     
@@ -55,19 +61,21 @@ def construct_lorenz(logit_file):
     m_diff = max_diff(sorted_probs)
     # Avg Diff
     avg_diff = average_diff(sorted_probs)
+    # Sum Cumsum
+    sum_cs = area_under_curve(sorted_probs.cumsum())
 
     if match_gamma and match_delta:
         ax.set_title(f'{model_name.title()} Lorenz Curve for Gamma {int(match_gamma.group(1)) / 100} and Delta {match_delta.group(1)}')
         plt.savefig(f'lorenz_plots/{model_name}_g{match_gamma.group(1)}_d{match_delta.group(1)}.png')
         print(f"{model_name.title()} Gini at gamma {match_gamma.group(1)} and delta {match_delta.group(1)}: {g_coeff}")
         print(f"{model_name.title()} Max diff at gamma {match_gamma.group(1)} and delta {match_delta.group(1)}: {m_diff}")
-        return g_coeff, m_diff, avg_diff, int(match_gamma.group(1)), int(match_delta.group(1)), model_name
+        return g_coeff, m_diff, avg_diff, sum_cs, int(match_gamma.group(1)), int(match_delta.group(1)), model_name
     else:
         ax.set_title(f'{model_name.title()} Lorenz Curve for Unmarked Model')
         plt.savefig(f'lorenz_plots/{model_name}_unmarked.png')
         print(f"{model_name.title()} Gini unmarked: {g_coeff}")
         print(f"{model_name.title()} Max diff unmarked: {m_diff}")
-        return g_coeff, m_diff, avg_diff, 0, 0, model_name
+        return g_coeff, m_diff, avg_diff, sum_cs, 0, 0, model_name
     
 
 def gini(sorted_arr):
@@ -95,6 +103,14 @@ def average_diff(a):
     return np.mean(np.diff(a))
 
 
+def area_under_curve(a): 
+    """
+    Approximate integral under CDF
+    Under a linear curve, the area would be (len(a) * 1) / 2
+    """
+    return np.sum(a) / ((len(a) * 1) / 2)
+
+
 def remap_keys(mapping):
     """
     For dumping tuples and floats in JSON
@@ -102,31 +118,42 @@ def remap_keys(mapping):
     return [{'key': k, 'value': float(v)} for k, v in mapping.items()]
 
 
+def fix_mappings(dict_list, model_names):
+    
+    for d in dict_list:
+        for name in model_names:
+            d[name] = remap_keys(dict(sorted(d[name].items())))
+
 def main(dir_name='logits'):
 
     ## Various Detection Metrics
-    gini_metrics = {}
-    m_diff_metrics = {}
-    a_diff_metrics = {}
+    gini_metrics = {'alpaca': {}, 'flan': {}}
+    m_diff_metrics = {'alpaca': {}, 'flan': {}}
+    a_diff_metrics = {'alpaca': {}, 'flan': {}}
+    sum_cumsum_metrics = {'alpaca': {}, 'flan': {}}
     
     for filename in sorted(os.listdir(dir_name)):
         if filename.endswith('.pt'):
             file_path = os.path.join(dir_name, filename)
-            g_c, m_d, a_d, gamma, delta, model = construct_lorenz(file_path)
-            gini_metrics[gamma, delta, model] = g_c
-            m_diff_metrics[gamma, delta, model] = m_d
-            a_diff_metrics[gamma, delta, model] = a_d
+            g_c, m_d, a_d, s_cs, gamma, delta, model = construct_lorenz(file_path)
+            gini_metrics[model][gamma, delta] = g_c
+            m_diff_metrics[model][gamma, delta] = m_d
+            a_diff_metrics[model][gamma, delta] = a_d
+            sum_cumsum_metrics[model][gamma, delta] = s_cs
 
-    gini_metrics, m_diff_metrics, a_diff_metrics = dict(sorted(gini_metrics.items())), dict(sorted(m_diff_metrics.items())), dict(sorted(a_diff_metrics.items()))    
+    fix_mappings([gini_metrics, m_diff_metrics, a_diff_metrics, sum_cumsum_metrics], ['alpaca', 'flan'])
 
     with open('gini.json', 'w') as f:
-        json.dump(remap_keys(gini_metrics), f, indent=4)
+        json.dump(gini_metrics, f, indent=4)
 
     with open('max_diff.json', 'w') as f:
-        json.dump(remap_keys(m_diff_metrics), f, indent=4)
+        json.dump(m_diff_metrics, f, indent=4)
 
     with open('avg_diff.json', 'w') as f:
-        json.dump(remap_keys(a_diff_metrics), f, indent=4)
+        json.dump(a_diff_metrics, f, indent=4)
+
+    with open('sum_cumsum.json', 'w') as f:
+        json.dump(sum_cumsum_metrics, f, indent=4)
 
 if __name__ == "__main__":
-    main()
+    main('logits-general')
