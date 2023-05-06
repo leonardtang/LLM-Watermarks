@@ -4,6 +4,7 @@ Analyze the distribution of a single 'randomly generated' digit from a LLM
 
 #TODO(ltang): write control flow for logit saving vs. sampling
 
+import argparse
 import datetime
 import json
 import matplotlib.pyplot as plt
@@ -26,6 +27,8 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 openai.api_key = OPENAI_API_KEY
 device = torch.device("cuda:2") if torch.cuda.is_available() else torch.device("cpu")
 print("Device:", device)
+CACHED_MODEL = None
+CACHED_TOKENIZER = None
 
 # TODO(ltang): clean this up later
 td3_prompt = "Pick a random number between 1 and 100. Just return the number, don't include any other text or punctuation in the response."
@@ -72,7 +75,6 @@ def generate_from_model(
         sample = False
         scores = True
         return_dict = True
-        num_beams = 1
 
     outputs = model.generate(
         input_ids,
@@ -226,27 +228,37 @@ def plot_digit_frequency(digits, output_file):
 def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='beam', length=10, repetitions=2000, watermark=None, rng=True) -> List:
 
     assert model_name in ['openai-api', 'gpt-2', 'alpaca-lora', 'flan-t5']
-    
-    if model_name == 'openai-api':
-        tokenizer = None
-        model = None
-    elif model_name == 'gpt-2':
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2LMHeadModel.from_pretrained('gpt2-xl').to(device)
-        vocab_size = model.config.vocab_size
-    elif model_name == 'alpaca-lora':
-        tokenizer = LlamaTokenizer.from_pretrained("chainyo/alpaca-lora-7b")
-        print("Done Loading Alpaca Tokenizer")
-        model = LlamaForCausalLM.from_pretrained(
-            "chainyo/alpaca-lora-7b",
-            torch_dtype=torch.float16
-        ).to(device)
-        print("Done Loading Alpaca Model")
-    elif model_name.startswith("flan-t5"):
-        tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-xxl')
-        print("Done Loading Flan Tokenizer")
-        model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-xxl').to(device)
-        print("Done Loading Flan Model")
+    global CACHED_MODEL
+    global CACHED_TOKENIZER
+
+    if CACHED_MODEL is None or CACHED_TOKENIZER is None:
+        if model_name == 'openai-api':
+            tokenizer = None
+            model = None
+        elif model_name == 'gpt-2':
+            tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+            model = GPT2LMHeadModel.from_pretrained('gpt2-xl').to(device)
+            vocab_size = model.config.vocab_size
+        elif model_name == 'alpaca-lora':
+            tokenizer = LlamaTokenizer.from_pretrained("chainyo/alpaca-lora-7b")
+            print("Done Loading Alpaca Tokenizer")
+            model = LlamaForCausalLM.from_pretrained(
+                "chainyo/alpaca-lora-7b",
+                torch_dtype=torch.float16
+            ).to(device)
+            print("Done Loading Alpaca Model")
+        elif model_name.startswith("flan-t5"):
+            tokenizer = AutoTokenizer.from_pretrained('google/flan-t5-xxl')
+            print("Done Loading Flan Tokenizer")
+            model = AutoModelForSeq2SeqLM.from_pretrained('google/flan-t5-xxl').to(device)
+            print("Done Loading Flan Model")
+
+        CACHED_TOKENIZER = tokenizer
+        CACHED_MODEL = model
+
+    else:
+        model = CACHED_MODEL
+        tokenizer = CACHED_TOKENIZER
     
     if rng:
         print(f"Sampling for {repetitions} repetitions")
@@ -343,9 +355,9 @@ def KL_loop(prompt, model, length, num_dists, out_file, gamma, delta, kl=False, 
         if model == 'openai-api':
             raise Exception('OpenAI Models do not return logits')
         elif model == 'alpaca-lora':
-            return repeatedly_sample(prompt, 'alpaca-lora', decode='greedy', length=length, repetitions=1000, watermark=watermark, rng=rng)
+            return repeatedly_sample(prompt, 'alpaca-lora', decode='beam', length=length, repetitions=1000, watermark=watermark, rng=rng)
         elif model == 'flan-t5':
-            return repeatedly_sample(prompt, 'flan-t5', decode='greedy', length=length, repetitions=1000, watermark=watermark, rng=rng)
+            return repeatedly_sample(prompt, 'flan-t5', decode='beam', length=length, repetitions=1000, watermark=watermark, rng=rng)
 
 
 def plot_example():
@@ -384,7 +396,7 @@ def main(model, rng=True):
                             pickle.dump(logits_tuple, f)
 
             # Can skip these conditions since we have already processed unmarked model
-            elif gamma == 0 and delta == 0:
+            elif gamma == 0 or delta == 0:
                 continue
             
             # Watermarked model of varying strengths
@@ -408,4 +420,8 @@ def main(model, rng=True):
                     
     
 if __name__ == "__main__":
-    main('alpaca-lora', rng=False)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', '-m', type=str)
+    parser.add_argument('--logits', '-l', action='store_true')
+    args = parser.parse_args()
+    main(args.model, rng=(not args.logits))
