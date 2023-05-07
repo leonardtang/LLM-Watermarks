@@ -5,7 +5,7 @@ import numpy as np
 import time
 import math
 import torch
-from scipy.stats import shapiro
+from scipy.stats import shapiro, kurtosis
 from api_keys import OPENAI_API_KEY
 
 openai.api_key = OPENAI_API_KEY
@@ -102,22 +102,33 @@ def hoefding_confidence_interval(probabilities, confidence_level=0.95):
 # Uses the Shapiro-Wilk test to determine if the data is normally distributed, and returns the p-value
 def is_normal(probabilities, alpha=0.05):
     stat, p = shapiro(probabilities)
+    kurt = kurtosis(probabilities)
 
-    return p, p > alpha
+    return p, p > alpha, {"s-w": stat, "kurt": kurt}
 
+def logprobs_normal(probabilities, alpha=0.05):
+    logprobs = np.log(probabilities)
+    stat, p = shapiro(logprobs)
+    kurt = kurtosis(logprobs)
+
+    return p, p > alpha, {"s-w": stat, "kurt": kurt}
 
 engine_options = ["ada", "babbage", "curie", "davinci", "text-ada-001", "text-babbage-001", "text-curie-001", "text-davinci-002", "text-davinci-003"]
 for engine in engine_options:
     print(f"Engine: {engine}")
     iterations, demo_sequence_length, length = 50, 20, 100
     # Generate probabilities using random demo sequences
-    probabilities = generate_demo_sequence_probabilities(iterations=iterations, demo_sequence_length=demo_sequence_length, length=length, engine=engine, digits=[0,1])
+    # probabilities = generate_demo_sequence_probabilities(iterations=iterations, demo_sequence_length=demo_sequence_length, length=length, engine=engine, digits=[0,1])
     # probabilities = generate_demo_sequence_average_probabilities(iterations=10, n_average=10, demo_sequence_lengths=[15, 5], digits=[0,1])
+    probabilities = torch.load('binary_data/Engine: ' + engine + ' Iterations: ' + str(iterations) + ' Demo Sequence Length: ' + str(demo_sequence_length) + ' Length: ' + str(length) + '.pt')
     print(f"Proportion of valid samples: {len(probabilities) / (iterations * length)}")
     confidence_level = 0.95
     lower_bound, upper_bound = hoefding_confidence_interval(probabilities, confidence_level)
-    # print(f"95% confidence interval for the probability of 0: [{lower_bound:.4f}, {upper_bound:.4f}]")
-    print(f"Is the data normally distributed? {is_normal(probabilities)}")
+    print(f"95% confidence interval for the probability of 0: [{lower_bound:.4f}, {upper_bound:.4f}]")
+    p, normal, stats = is_normal(probabilities)
+    print(f"Are the probabilities normally distributed? {is_normal}")
+    print(stats.get("s-w"), stats.get("kurt"))
+    print(f"Are the log probabilities normally distributed? {logprobs_normal(probabilities)}")
     print(f"Mean: {np.mean(probabilities):.4f}")
     print(f"Standard deviation: {np.std(probabilities):.4f}")
     save_token_probabilities(probabilities, save_path='binary_data/Engine: ' + engine + ' Iterations: ' + str(iterations) + ' Demo Sequence Length: ' + str(demo_sequence_length) + ' Length: ' + str(length) + '.pt')
