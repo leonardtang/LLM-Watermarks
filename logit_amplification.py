@@ -5,14 +5,17 @@ import os
 import pickle
 from matplotlib.widgets import Slider
 
-FOLDER = "amplification_test"
+FOLDER = "logits-algo-alpaca"
 
 def average_logits(folder):
-    accumulator = np.zeros((32128,), dtype="float64")
+    accumulator = np.zeros((32000,), dtype="float64")
     for name in glob.glob(folder + "/*.pt"):
         with open(name, 'rb') as file:
-            logits = pickle.load(file)
-            accumulator += logits[0].numpy()[0]
+            print("Loaded a file!")
+            logits = pickle.load(file)[0].numpy()[0]
+            print(logits)
+            accumulator += logits
+    accumulator *= 0.01
     return accumulator
 
 ACCUMULATED = average_logits(FOLDER)
