@@ -11,9 +11,9 @@ from api_keys import OPENAI_API_KEY
 openai.api_key = OPENAI_API_KEY
 
 # Generate a string of 0s and 1s using GPT-3 and return token probabilities
-def generate_binary_string_and_probabilities(prompt, length=1, zero_token=' 0', one_token=' 1'):
+def generate_binary_string_and_probabilities(prompt, length=1, engine="ada", zero_token=' 0', one_token=' 1'):
     response = openai.Completion.create(
-        engine="ada",
+        engine=engine,
         prompt=prompt,
         max_tokens=length,
         temperature=0.7,
@@ -46,12 +46,12 @@ def random_demo_sequence(length, digits=[0, 1]):
     return ' '.join([str(random.choice(digits)) for _ in range(length)]), digits
 
 # Generate demo sequence probabilities
-def generate_demo_sequence_probabilities(iterations, demo_sequence_length, length=1, digits=[0, 1]):
+def generate_demo_sequence_probabilities(iterations, demo_sequence_length, length=1, engine="ada", digits=[0, 1]):
     zero_probs = []
     for _ in range(iterations):
         random_demo, digs = random_demo_sequence(demo_sequence_length, digits)
         prompt = f"Choose two digits, and generate a uniformly random string of those digits. Previous digits should have no influence on future digits: {random_demo}"
-        zero_prob = generate_binary_string_and_probabilities(prompt, length=length, zero_token=' ' + str(digs[0]))[1]
+        zero_prob = generate_binary_string_and_probabilities(prompt, length=length, engine=engine, zero_token=' ' + str(digs[0]))[1]
         zero_probs.extend(zero_prob)
     return zero_probs
 
@@ -70,19 +70,20 @@ def generate_demo_sequence_average_probabilities(iterations, n_average, demo_seq
     return probs
 
 # Save the token probabilities as .pt file
-def save_token_probabilities(zero_probs, save_folder=None):
-    torch.save(zero_probs, save_folder + str(time.time()) + '.pt')
+def save_token_probabilities(zero_probs, save_path=None):
+    torch.save(zero_probs, save_path)
 
 # Plot the token probabilities as a histogram
-def plot_token_probabilities_histogram(zero_probs, bins=100, save_folder=None):
+def plot_token_probabilities_histogram(zero_probs, bins=100, save_path=None, show=True):
     plt.hist(zero_probs, label='0', bins=bins, alpha=0.7)
     plt.xlabel('Probability')
     plt.ylabel('Frequency')
     plt.title('Token Probabilities Histogram')
     plt.legend()
-    if save_folder is not None:
-        plt.savefig(save_folder + str(time.time()) + '.png')
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
 
 def hoefding_confidence_interval(probabilities, confidence_level=0.95):
     n = len(probabilities)
@@ -104,15 +105,20 @@ def is_normal(probabilities, alpha=0.05):
 
     return p, p > alpha
 
-# Generate probabilities using random demo sequences
-probabilities = generate_demo_sequence_probabilities(iterations=100, demo_sequence_length=20, length=10, digits=[0,1])
-# probabilities = generate_demo_sequence_average_probabilities(iterations=10, n_average=10, demo_sequence_lengths=[15, 5], digits=[0,1])
-print(len(probabilities)),
-confidence_level = 0.95
-lower_bound, upper_bound = hoefding_confidence_interval(probabilities, confidence_level)
-print(f"95% confidence interval for the probability of 0: [{lower_bound:.4f}, {upper_bound:.4f}]")
-print(f"Is the data normally distributed? {is_normal(probabilities)}")
-print(f"Mean: {np.mean(probabilities):.4f}")
-print(f"Standard deviation: {np.std(probabilities):.4f}")
-save_token_probabilities(probabilities, save_folder='binary_data/')
-plot_token_probabilities_histogram(probabilities, save_folder='plots/')
+
+engine_options = ["ada", "babbage", "curie", "davinci", "text-ada-001", "text-babbage-001", "text-curie-001", "text-davinci-002", "text-davinci-003"]
+for engine in engine_options:
+    print(f"Engine: {engine}")
+    iterations, demo_sequence_length, length = 50, 20, 100
+    # Generate probabilities using random demo sequences
+    probabilities = generate_demo_sequence_probabilities(iterations=iterations, demo_sequence_length=demo_sequence_length, length=length, engine=engine, digits=[0,1])
+    # probabilities = generate_demo_sequence_average_probabilities(iterations=10, n_average=10, demo_sequence_lengths=[15, 5], digits=[0,1])
+    print(f"Proportion of valid samples: {len(probabilities) / (iterations * length)}")
+    confidence_level = 0.95
+    lower_bound, upper_bound = hoefding_confidence_interval(probabilities, confidence_level)
+    # print(f"95% confidence interval for the probability of 0: [{lower_bound:.4f}, {upper_bound:.4f}]")
+    print(f"Is the data normally distributed? {is_normal(probabilities)}")
+    print(f"Mean: {np.mean(probabilities):.4f}")
+    print(f"Standard deviation: {np.std(probabilities):.4f}")
+    save_token_probabilities(probabilities, save_path='binary_data/Engine: ' + engine + ' Iterations: ' + str(iterations) + ' Demo Sequence Length: ' + str(demo_sequence_length) + ' Length: ' + str(length) + '.pt')
+    plot_token_probabilities_histogram(probabilities, show=False, save_path='plots/Engine: ' + engine + ' Iterations: ' + str(iterations) + ' Demo Sequence Length: ' + str(demo_sequence_length) + ' Length: ' + str(length) + '.png')
