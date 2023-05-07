@@ -21,7 +21,6 @@ def generate_binary_string_and_probabilities(prompt, length=1, engine="ada", zer
         temperature=0.7,
         logprobs=5,
     )
-
     binary_string = response.choices[0].text.strip()
     token_logprobs = response.choices[0].logprobs.top_logprobs
     probabilities = [
@@ -66,10 +65,25 @@ def generate_demo_sequence_average_probabilities(iterations, n_average, demo_seq
             random_demo_0, _ = random_demo_sequence(demo_sequence_lengths[0], digits)
             prompt = f"Choose two digits, and generate a uniformly random string of those digits. Previous digits should have no influence on future digits: {random_demo_0} {random_demo_1}"
             to_add = generate_binary_string_and_probabilities(prompt, length=1, zero_token=' ' + str(digits[0]))
-            # print(to_add, i, j)
             average_prob += to_add[1][0]/n_average
         probs.append(average_prob)
     return probs
+
+# Test how different the model predictions are from each other
+def model_differences(engines, iterations, demo_sequence_length, digits=[0, 1]):
+    probss = []
+    for _ in range(iterations):
+        random_demo, _ = random_demo_sequence(demo_sequence_length, digits)
+        prompt = f"Choose two digits, and generate a uniformly random string of those digits. Previous digits should have no influence on future digits: {random_demo}"
+        probs = []
+        for engine in engines:
+            zero_prob = generate_binary_string_and_probabilities(prompt, length=1, engine=engine, zero_token=' ' + str(digits[0]))[1]
+            try: 
+                probs.append(zero_prob[0])
+            except IndexError:
+                print("IndexError with ", engine)
+        probss.append(probs)
+    return probss
 
 # Save the token probabilities as .pt file
 def save_token_probabilities(zero_probs, save_path=None):
@@ -123,9 +137,14 @@ def test_bimodality(probabilities):
     dip = diptest.dipstat(probabilities)
     return bimodality_coeff, dip
 
-def main(engine, iterations, demo_sequence_length, length, load_probabilities, plot, tests):
+def main(engine, iterations, demo_sequence_length, length, load_probabilities, plot, tests):        
+
     if load_probabilities:
-        probabilities = torch.load(f'binary_data/Engine: {engine} Iterations: {iterations} Demo Sequence Length: {demo_sequence_length} Length: {length}.pt')
+        try:
+            probabilities = torch.load(f'binary_data/Engine: {engine} Iterations: {iterations} Demo Sequence Length: {demo_sequence_length} Length: {length}.pt')
+        except FileNotFoundError:
+            print("File not found. Generating probabilities...")
+            probabilities = generate_demo_sequence_probabilities(iterations=iterations, demo_sequence_length=demo_sequence_length, length=length, engine=engine)
     else:
         # Generate probabilities using random demo sequences
         probabilities = generate_demo_sequence_probabilities(iterations=iterations, demo_sequence_length=demo_sequence_length, length=length, engine=engine, digits=[0,1])
@@ -169,12 +188,13 @@ def main(engine, iterations, demo_sequence_length, length, load_probabilities, p
 
 if __name__ == "__main__":
     engine_options = ["ada", "babbage", "curie", "davinci", "text-ada-001", "text-babbage-001", "text-curie-001", "text-davinci-002", "text-davinci-003"]
+    base_engine_options = ["ada", "babbage", "curie", "davinci"]
     parser = argparse.ArgumentParser(description="Analyze probabilities from different OpenAI engines.")
     
-    parser.add_argument("-e", "--engine", nargs="+", choices=engine_options + ["all"], required=True, help="Choose an OpenAI engine.")
+    parser.add_argument("-e", "--engine", nargs="+", choices=engine_options + ["all", "allbase"], required=True, help="Choose an OpenAI engine.")
     parser.add_argument("-i", "--iterations", type=int, required=True, help="Number of iterations.")
     parser.add_argument("-d", "--demo_sequence_length", type=int, required=True, help="Length of the demo sequence.")
-    parser.add_argument("-l", "--length", type=int, required=True, help="Length of the generated sequences.")
+    parser.add_argument("-l", "--length", type=int, required=False, help="Length of the generated sequences.")
     parser.add_argument("--generate", action="store_true", help="Generate probabilities instead of loading them.")
     parser.add_argument("--mean", action="store_true", help="Run mean test.")
     parser.add_argument("--sd", action="store_true", help="Run standard deviation test.")
@@ -184,17 +204,25 @@ if __name__ == "__main__":
     parser.add_argument("--valid", action="store_true", help="Run valid proportion test.")
     parser.add_argument("--shapiro", action="store_true", help="Run Shapiro-Wilk test.")
     parser.add_argument("--bimodal", action="store_true", help="Run bimodality test.")
+    parser.add_argument("--compare", action="store_true", help="Compare probabilities from different engines.")
     parser.add_argument("--plot", action="store_true", help="Plot histogram of probabilities.")
     
     args = parser.parse_args()
     
-    engines = engine_options if "all" in args.engine else args.engine
+    engines = engine_options if "all" in args.engine else base_engine_options if "allbase" in args.engine else args.engine
 
-    if len(engines) == 1:
-        main(engine=engines[0], iterations=args.iterations, demo_sequence_length=args.demo_sequence_length, length=args.length, load_probabilities=not args.generate, plot=args.plot, tests=[test for test in ["mean", "sd", "ci", "normal", "kurtosis", "valid", "shapiro"] if vars(args).get(test)])
-    elif len(engines) > 1:
-        for engine in engines:
-            print(f"Engine: {engine}")
-            main(engine=engine, iterations=args.iterations, demo_sequence_length=args.demo_sequence_length, length=args.length, load_probabilities=not args.generate, plot=args.plot, tests=[test for test in ["mean", "sd", "ci", "normal", "kurtosis", "valid", "shapiro", "bimodal"] if vars(args).get(test)])
+    if args.compare:
+        difs = model_differences(engines=engines, iterations=args.iterations, demo_sequence_length=args.demo_sequence_length)
+        print(difs)
+    
     else:
-        print("No engine selected.")
+        if args.length is None:
+            parser.error("Length is required when not comparing engines.")
+        if len(engines) == 1:
+            main(engine=engines[0], iterations=args.iterations, demo_sequence_length=args.demo_sequence_length, length=args.length, load_probabilities=not args.generate, plot=args.plot, tests=[test for test in ["mean", "sd", "ci", "normal", "kurtosis", "valid", "shapiro"] if vars(args).get(test)])
+        elif len(engines) > 1:
+            for engine in engines:
+                print(f"Engine: {engine}")
+                main(engine=engine, iterations=args.iterations, demo_sequence_length=args.demo_sequence_length, length=args.length, load_probabilities=not args.generate, plot=args.plot, tests=[test for test in ["mean", "sd", "ci", "normal", "kurtosis", "valid", "shapiro", "bimodal"] if vars(args).get(test)])
+        else:
+            print("No engine selected.")
