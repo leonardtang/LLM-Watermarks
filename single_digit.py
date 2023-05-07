@@ -369,30 +369,32 @@ def plot_example():
     # KL_loop(10, 'td3_unmarked_rep_10.npy', 0.5, 10)
 
 
-def main(model, rng=True):
+def main(model, prompt, rng=True, save_version=''):
     """
     Meta-loop over watermark parameters and generate random number distribution at each parameter setting
     """
 
-    for gamma in [0, 0.1, 0.25, 0.5, 0.75]:
-        for delta in [0, 1, 5, 10, 50, 100]:
+    for gamma in [0]:
+        for delta in[0]:
+    # for gamma in [0, 0.1, 0.25, 0.5, 0.75]:
+    #     for delta in [0, 1, 5, 10, 50, 100]:
             print(f"KL Loop for gamma {int(gamma * 100)} and delta {delta}")
             
             # Unmarked model
             if gamma == 0 and delta == 0:
                 if rng:
                     if model == 'flan-t5':
-                        KL_loop(flan_prompt, model, 10, 10, f'flan_unmarked.npy', None, None)
+                        KL_loop(prompt, model, 10, 10, f'flan_unmarked.npy', None, None)
                     if model == 'alpaca-lora':
-                        KL_loop(alpaca_prompt, model, 10, 10, f'alpaca_unmarked.npy', None, None)
+                        KL_loop(prompt, model, 10, 10, f'alpaca_unmarked.npy', None, None)
                 else:
                     if model == 'flan-t5':
-                        logits_tuple = KL_loop(flan_prompt, model, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta, rng=False)
-                        with open(f'flan_logits_unmarked.pt', 'wb') as f:
+                        logits_tuple = KL_loop(prompt, model, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta, rng=False)
+                        with open(f'flan_logits_unmarked{save_version}.pt', 'wb') as f:
                             pickle.dump(logits_tuple, f)
                     if model == 'alpaca-lora':
-                        logits_tuple = KL_loop(alpaca_prompt, model, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta, rng=False)
-                        with open(f'alpaca_logits_unmarked.pt', 'wb') as f:
+                        logits_tuple = KL_loop(prompt, model, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta, rng=False)
+                        with open(f'alpaca_logits_unmarked{save_version}.pt', 'wb') as f:
                             pickle.dump(logits_tuple, f)
 
             # Can skip these conditions since we have already processed unmarked model
@@ -404,18 +406,18 @@ def main(model, rng=True):
                 # Generate random number distributions
                 if rng:
                     if model == 'flan-t5':
-                        KL_loop(alpaca_prompt, model, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+                        KL_loop(prompt, model, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                     if model == 'alpaca-lora':
-                        KL_loop(flan_prompt, model, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
+                        KL_loop(prompt, model, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta)
                 # Save logits instead of generating random number distribution
                 else:
                     if model == 'flan-t5':
-                        logits_tuple = KL_loop(flan_prompt, model, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta, rng=False)
-                        with open("flan_logits_marked_g{}_d{}.pt".format(int(gamma * 100), delta), 'wb') as f:
+                        logits_tuple = KL_loop(prompt, model, 10, 10, f'flan_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta, rng=False)
+                        with open("flan_logits_marked_g{}_d{}{}.pt".format(int(gamma * 100), delta, save_version), 'wb') as f:
                             pickle.dump(logits_tuple, f)
                     if model == 'alpaca-lora':
-                        logits_tuple = KL_loop(alpaca_prompt, model, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta, rng=False)
-                        with open("alpaca_logits_marked_g{}_d{}.pt".format(int(gamma * 100), delta), 'wb') as f:
+                        logits_tuple = KL_loop(prompt, model, 10, 10, f'alpaca_marked_g{int(gamma * 100)}_d{delta}_rep_10.npy', gamma, delta, rng=False)
+                        with open("alpaca_logits_marked_g{}_d{}{}.pt".format(int(gamma * 100), delta, save_version), 'wb') as f:
                             pickle.dump(logits_tuple, f)
                     
     
@@ -424,4 +426,27 @@ if __name__ == "__main__":
     parser.add_argument('--model', '-m', type=str)
     parser.add_argument('--logits', '-l', action='store_true')
     args = parser.parse_args()
-    main(args.model, rng=(not args.logits))
+
+    with open('openwebtext.json', 'r') as f:
+        pile_dict = json.load(f)
+
+    # print("pile_dict", pile_dict)
+    texts = []
+
+    def return_texts(d, output):
+        for key, value in d.items():
+            # print("key", key)
+            if key == 'text':
+                output.append(value)
+            if isinstance(value, dict):
+                return_texts(value, output)
+            if isinstance(value, list):
+                for row in value:
+                    return_texts(row, output)
+
+    return_texts(pile_dict, texts)
+
+    prompts = [t + ". Now write me a story:" for t in texts]
+
+    for i, p in enumerate(prompts):
+        main(args.model, p, rng=(not args.logits), save_version=f'_v{i + 51}')
