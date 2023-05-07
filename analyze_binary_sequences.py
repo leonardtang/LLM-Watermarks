@@ -5,8 +5,9 @@ import numpy as np
 import time
 import math
 import torch
-from scipy.stats import shapiro, kurtosis
+from scipy.stats import shapiro, kurtosis, skew
 import argparse
+import diptest
 from api_keys import OPENAI_API_KEY
 
 openai.api_key = OPENAI_API_KEY
@@ -114,26 +115,13 @@ def logprobs_normal(probabilities, alpha=0.05):
 
     return p, p > alpha, {"s-w": stat, "kurt": kurt}
 
-# engine_options = ["ada", "babbage", "curie", "davinci", "text-ada-001", "text-babbage-001", "text-curie-001", "text-davinci-002", "text-davinci-003"]
-# for engine in engine_options:
-#     print(f"Engine: {engine}")
-#     iterations, demo_sequence_length, length = 50, 20, 100
-#     # Generate probabilities using random demo sequences
-#     # probabilities = generate_demo_sequence_probabilities(iterations=iterations, demo_sequence_length=demo_sequence_length, length=length, engine=engine, digits=[0,1])
-#     # probabilities = generate_demo_sequence_average_probabilities(iterations=10, n_average=10, demo_sequence_lengths=[15, 5], digits=[0,1])
-#     probabilities = torch.load('binary_data/Engine: ' + engine + ' Iterations: ' + str(iterations) + ' Demo Sequence Length: ' + str(demo_sequence_length) + ' Length: ' + str(length) + '.pt')
-#     print(f"Proportion of valid samples: {len(probabilities) / (iterations * length)}")
-#     confidence_level = 0.95
-#     lower_bound, upper_bound = hoefding_confidence_interval(probabilities, confidence_level)
-#     print(f"95% confidence interval for the probability of 0: [{lower_bound:.4f}, {upper_bound:.4f}]")
-#     p, normal, stats = is_normal(probabilities)
-#     print(f"Are the probabilities normally distributed? {is_normal}")
-#     print(stats.get("s-w"), stats.get("kurt"))
-#     print(f"Are the log probabilities normally distributed? {logprobs_normal(probabilities)}")
-#     print(f"Mean: {np.mean(probabilities):.4f}")
-#     print(f"Standard deviation: {np.std(probabilities):.4f}")
-#     save_token_probabilities(probabilities, save_path='binary_data/Engine: ' + engine + ' Iterations: ' + str(iterations) + ' Demo Sequence Length: ' + str(demo_sequence_length) + ' Length: ' + str(length) + '.pt')
-#     plot_token_probabilities_histogram(probabilities, show=False, save_path='plots/Engine: ' + engine + ' Iterations: ' + str(iterations) + ' Demo Sequence Length: ' + str(demo_sequence_length) + ' Length: ' + str(length) + '.png')
+def test_bimodality(probabilities):
+    skewness = skew(probabilities)
+    kurt = kurtosis(probabilities)
+    n = len(probabilities)
+    bimodality_coeff = (skewness**2 + 1) / (kurt + 3*(n-1)**2/((n-2)*(n-3)))
+    dip = diptest.dipstat(probabilities)
+    return bimodality_coeff, dip
 
 def main(engine, iterations, demo_sequence_length, length, load_probabilities, plot, tests):
     if load_probabilities:
@@ -168,6 +156,11 @@ def main(engine, iterations, demo_sequence_length, length, load_probabilities, p
     if "standard_deviation" in tests:
         print(f"Standard deviation: {np.std(probabilities):.4f}")
 
+    if "bimodal" in tests:
+        bimodality_coeff, dip = test_bimodality(probabilities)
+        print(f"Bimodality coefficient: {bimodality_coeff:.4f}")
+        print(f"Dip: {dip}")
+
     if not load_probabilities:
         save_token_probabilities(probabilities, save_path=f'binary_data/Engine: {engine} Iterations: {iterations} Demo Sequence Length: {demo_sequence_length} Length: {length}.pt')
 
@@ -190,6 +183,7 @@ if __name__ == "__main__":
     parser.add_argument("--kurtosis", action="store_true", help="Run kurtosis test.")
     parser.add_argument("--valid", action="store_true", help="Run valid proportion test.")
     parser.add_argument("--shapiro", action="store_true", help="Run Shapiro-Wilk test.")
+    parser.add_argument("--bimodal", action="store_true", help="Run bimodality test.")
     parser.add_argument("--plot", action="store_true", help="Plot histogram of probabilities.")
     
     args = parser.parse_args()
@@ -201,8 +195,6 @@ if __name__ == "__main__":
     elif len(engines) > 1:
         for engine in engines:
             print(f"Engine: {engine}")
-            main(engine=engine, iterations=args.iterations, demo_sequence_length=args.demo_sequence_length, length=args.length, load_probabilities=not args.generate, plot=args.plot, tests=[test for test in ["mean", "sd", "ci", "normal", "kurtosis", "valid", "shapiro"] if vars(args).get(test)])
+            main(engine=engine, iterations=args.iterations, demo_sequence_length=args.demo_sequence_length, length=args.length, load_probabilities=not args.generate, plot=args.plot, tests=[test for test in ["mean", "sd", "ci", "normal", "kurtosis", "valid", "shapiro", "bimodal"] if vars(args).get(test)])
     else:
         print("No engine selected.")
-
-    # main(engine=args.engine, iterations=args.iterations, demo_sequence_length=args.demo_sequence_length, length=args.length, load_probabilities=args.load_probabilities, plot=args.plot, tests=[test for test in ["mean", "sd", "ci", "normal", "kurtosis", "valid", "shapiro"] if vars(args).get(test)])    
