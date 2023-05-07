@@ -22,7 +22,7 @@ def plot_logits(file_name1, file_name2):
     
     plt.show()
 
-file_name1 = "./logits-algo-alpaca/alpaca_logits_unmarked_v_0.pt"
-file_name2 = "./logits-algo-alpaca/alpaca_logits_unmarked_v_1.pt"
+file_name1 = "./logits-pile-alpaca/alpaca_logits_unmarked_v_0.pt"
+file_name2 = "./logits-pile-alpaca/alpaca_logits_unmarked_v_1.pt"
 
 plot_logits(file_name1, file_name2)
