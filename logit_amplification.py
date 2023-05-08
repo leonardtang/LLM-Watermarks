@@ -7,6 +7,7 @@ from matplotlib.widgets import Slider
 
 FOLDER = "logits-pile-alpaca"
 
+
 def average_logits(folder):
     accumulators = np.zeros((140,32000), dtype="float64")
     num_files = 0
@@ -45,26 +46,27 @@ def update(val):
 
     fig.canvas.draw_idle()
 
-lorenz = construct_lorenz(0.5, 10, 25)
+if __name__ == "__main__":
+    lorenz = construct_lorenz(0.5, 10, 25)
 
-fig, ax = plt.subplots(figsize=[6, 6])
-plt.subplots_adjust(left=0.25, bottom=0.25)
+    fig, ax = plt.subplots(figsize=[6, 6])
+    plt.subplots_adjust(left=0.25, bottom=0.25)
 
-ax.hist(lorenz, bins=200, color='darkgreen', alpha=0.7)
-ax.set_xlabel('Cumulative Probability')
-ax.set_ylabel('Frequency')
+    ax.hist(lorenz, bins=200, color='darkgreen', alpha=0.7)
+    ax.set_xlabel('Cumulative Probability')
+    ax.set_ylabel('Frequency')
 
-axcolor = 'lightgoldenrodyellow'
-ax_gamma = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
-ax_delta = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
-ax_average = plt.axes([0.25, 0.05, 0.65, 0.03], facecolor=axcolor)
+    axcolor = 'lightgoldenrodyellow'
+    ax_gamma = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+    ax_delta = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
+    ax_average = plt.axes([0.25, 0.05, 0.65, 0.03], facecolor=axcolor)
 
-gamma_slider = Slider(ax_gamma, 'Gamma', 0, 1, valinit=0.5, valstep=0.01)
-delta_slider = Slider(ax_delta, 'Delta', 0, 100, valinit=10, valstep=1)
-averaging_slider = Slider(ax_average, 'Averaging', 1, 140, valinit=25, valstep=1)
+    gamma_slider = Slider(ax_gamma, 'Gamma', 0, 1, valinit=0.5, valstep=0.01)
+    delta_slider = Slider(ax_delta, 'Delta', 0, 100, valinit=10, valstep=1)
+    averaging_slider = Slider(ax_average, 'Averaging', 1, 140, valinit=25, valstep=1)
 
-gamma_slider.on_changed(update)
-delta_slider.on_changed(update)
-averaging_slider.on_changed(update)
+    gamma_slider.on_changed(update)
+    delta_slider.on_changed(update)
+    averaging_slider.on_changed(update)
 
-plt.show()
+    plt.show()
