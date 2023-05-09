@@ -11,26 +11,15 @@ import re
 from scipy import stats
 
 
-# TODO(ltang): perform some analysis on logits...? Canonical papers on this topic?
-def analyze_logits(dist):
-    print()
-
-
 def construct_lorenz(logit_file):
 
     with open(logit_file, 'rb') as file:
         logits = pickle.load(file)
 
-    # TODO(ltang): investigate which index to select logits from
     logits = logits[1].numpy()[0]
 
-    # TODO(ltang): figure out how to deal with probability vs. logits in theory/math
     z = logits - max(logits)
     probs = np.exp(z) / np.sum(np.exp(z)) 
-    
-    # TODO(ltang): normalization schemes to consider...?
-    # logits = (logits - logits.min()) / (logits.max() - logits.min())
-    # logits = logits / np.linalg.norm(logits)
 
     sorted_probs = probs.copy()
     sorted_probs.sort()
@@ -156,4 +145,4 @@ def main(dir_name='logits'):
         json.dump(sum_cumsum_metrics, f, indent=4)
 
 if __name__ == "__main__":
-    main('logits-general')
+    main('logits-lorenz')

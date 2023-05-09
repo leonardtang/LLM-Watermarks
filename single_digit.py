@@ -217,12 +217,12 @@ def plot_digit_frequency(digits, output_file):
         json.dump(digit_counts, file, indent=4)
         
     plt.hist(digits, bins=100, range=(0, 100), alpha=0.7, density=True)
-    plt.xlabel('Digit')
+    plt.xlabel('Generated Number')
     plt.ylabel('Frequency')
-    plt.title(f'Digit Frequencies for {len(digits)} Samples')
+    plt.title(f'RNG Frequencies for {len(digits)} Samples')
     plt.legend()
     png_file = numbered_out_file.split('.')[0] + '.png'
-    plt.savefig(png_file)
+    plt.savefig('test.png')
 
 
 def repeatedly_sample(prompt, model_name, engine="text-davinci-003", decode='beam', length=10, repetitions=2000, watermark=None, rng=True) -> List:
@@ -363,7 +363,7 @@ def KL_loop(prompt, model, length, num_dists, out_file, gamma, delta, kl=False, 
 def plot_example():
     watermark = SingleLookbackWatermark(gamma=0.5, delta=10)
     digit_sample = repeatedly_sample(prompt, 'openai-api', engine='text-davinci-003', decode='beam', length=10, repetitions=1000, watermark=watermark)
-    plot_digit_frequency(digit_sample, 'digit_counts_td3_05_10.json')
+    plot_digit_frequency(digit_sample, 'misc/digit_counts_td3_05_10.json')
 
     ## Misc. Examples
     # KL_loop(10, 'td3_unmarked_rep_10.npy', 0.5, 10)
@@ -374,10 +374,8 @@ def main(model, prompt, rng=True, save_version=''):
     Meta-loop over watermark parameters and generate random number distribution at each parameter setting
     """
 
-    for gamma in [0]:
-        for delta in[0]:
-    # for gamma in [0, 0.1, 0.25, 0.5, 0.75]:
-    #     for delta in [0, 1, 5, 10, 50, 100]:
+    for gamma in [0, 0.1, 0.25, 0.5, 0.75]:
+        for delta in [0, 1, 5, 10, 50, 100]:
             print(f"KL Loop for gamma {int(gamma * 100)} and delta {delta}")
             
             # Unmarked model
